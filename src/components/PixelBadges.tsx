@@ -71,13 +71,13 @@ export const PixelCoin: React.FC<{ size?: number; value?: string | number }> = (
   </div>
 );
 
-export const PixelHelmetIcon: React.FC<{ size?: number; color?: string }> = ({ size = 26, color = '#155e9e' }) => (
+export const PixelHelmetIcon: React.FC<{ size?: number; color?: string; className?: string }> = ({ size = 26, color = '#155e9e', className = '' }) => (
   <svg
     viewBox="0 0 20 20"
     width={size}
     height={size}
     style={{ shapeRendering: 'crispEdges' }}
-    className="inline-block"
+    className={`inline-block ${className}`}
   >
     {/* Helmet dome */}
     <rect x="5" y="3" width="9" height="9" fill={color} />
@@ -94,8 +94,8 @@ export const PixelHelmetIcon: React.FC<{ size?: number; color?: string }> = ({ s
   </svg>
 );
 
-export const PixelShieldIcon: React.FC<{ size?: number; color?: string }> = ({ size = 32, color = '#12579b' }) => (
-  <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size * 1.1 }}>
+export const PixelShieldIcon: React.FC<{ size?: number; color?: string; className?: string }> = ({ size = 32, color = '#12579b', className = '' }) => (
+  <div className={`relative inline-flex items-center justify-center ${className}`} style={{ width: size, height: size * 1.1 }}>
     <svg
       viewBox="0 0 24 28"
       width={size}

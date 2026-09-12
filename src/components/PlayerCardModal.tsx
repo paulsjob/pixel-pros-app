@@ -102,15 +102,15 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
         <div className="mt-3.5 sm:mt-4 p-2.5 sm:p-3 bg-[#fae9c8] border-2 border-[#d4a86a] rounded-xs grid grid-cols-3 gap-2 text-center">
           <div>
             <span className="block font-retro text-[9px] sm:text-[10px] text-[#784610] uppercase">PASS YARDS</span>
-            <span className="font-pixel text-[11px] sm:text-xs text-[#5c3509]">{player.stats.passingYards.toLocaleString()}</span>
+            <span className="font-pixel text-[11px] sm:text-xs text-[#5c3509]">{(player.stats?.passingYards ?? 0).toLocaleString()}</span>
           </div>
           <div>
             <span className="block font-retro text-[9px] sm:text-[10px] text-[#784610] uppercase">RUSH YARDS</span>
-            <span className="font-pixel text-[11px] sm:text-xs text-[#5c3509]">{player.stats.rushingYards.toLocaleString()}</span>
+            <span className="font-pixel text-[11px] sm:text-xs text-[#5c3509]">{(player.stats?.rushingYards ?? 0).toLocaleString()}</span>
           </div>
           <div>
             <span className="block font-retro text-[9px] sm:text-[10px] text-[#784610] uppercase">TOUCHDOWNS</span>
-            <span className="font-pixel text-[11px] sm:text-xs text-[#b45309] font-bold">{player.stats.touchdowns}</span>
+            <span className="font-pixel text-[11px] sm:text-xs text-[#b45309] font-bold">{player.stats?.touchdowns ?? 0}</span>
           </div>
         </div>
 

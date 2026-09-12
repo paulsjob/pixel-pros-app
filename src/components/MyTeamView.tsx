@@ -16,9 +16,9 @@ interface MyTeamViewProps {
 }
 
 export const MyTeamView: React.FC<MyTeamViewProps> = ({
-  roster,
+  roster = [],
   user,
-  selectedPlayers,
+  selectedPlayers = [],
   onSelectSlot,
   onOpenPlayerDetail,
   onOpenLockerRoom,
@@ -28,23 +28,28 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
   const [sortAsc, setSortAsc] = useState(false);
   const [filterActive, setFilterActive] = useState(false);
 
-  // Compute aggregate stats of the selected 3 players (matching mockup stats!)
-  const aggregateStats = selectedPlayers.reduce(
+  const safeSelected = Array.isArray(selectedPlayers) ? selectedPlayers : [];
+  const safeRoster = Array.isArray(roster) ? roster : [];
+
+  // Compute aggregate stats of the selected 3 players
+  const aggregateStats = safeSelected.reduce(
     (acc, player) => ({
-      passingYards: acc.passingYards + (player?.stats.passingYards || 0),
-      rushingYards: acc.rushingYards + (player?.stats.rushingYards || 0),
-      touchdowns: acc.touchdowns + (player?.stats.touchdowns || 0),
+      passingYards: acc.passingYards + (player?.stats?.passingYards || 0),
+      rushingYards: acc.rushingYards + (player?.stats?.rushingYards || 0),
+      touchdowns: acc.touchdowns + (player?.stats?.touchdowns || 0),
     }),
     { passingYards: 0, rushingYards: 0, touchdowns: 0 }
   );
 
   // If only 1 player selected (like in the mockup), show their stats or baseline
-  const displayStats = selectedPlayers.length === 1 && selectedPlayers[0].displayName === 'Jeerice Henry'
+  const displayStats = safeSelected.length === 1 && safeSelected[0]?.displayName === 'Jeerice Henry'
     ? { passingYards: 4500, rushingYards: 310, touchdowns: 28 }
     : aggregateStats;
 
-  const sortedRoster = [...roster].sort((a, b) => {
-    return sortAsc ? a.rating - b.rating : b.rating - a.rating;
+  const sortedRoster = safeRoster.slice().sort((a, b) => {
+    const ratingA = a?.rating ?? 0;
+    const ratingB = b?.rating ?? 0;
+    return sortAsc ? ratingA - ratingB : ratingB - ratingA;
   });
 
   return (
@@ -165,9 +170,9 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
             </div>
 
             {/* 3 Active Player Slots: Horizontal Scroll Row on Mobile, 3-Column Grid on Tablet/Desktop */}
-            <div className="flex sm:grid sm:grid-cols-3 gap-2.5 sm:gap-4 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 snap-x snap-mandatory">
+            <div className="flex sm:grid sm:grid-cols-3 gap-2 sm:gap-4 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 snap-x snap-mandatory overscroll-contain">
               {[0, 1, 2].map(slotIndex => {
-                const player = selectedPlayers[slotIndex];
+                const player = safeSelected[slotIndex];
 
                 return (
                   <div
@@ -179,7 +184,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                         onSelectSlot(slotIndex);
                       }
                     }}
-                    className="min-w-[135px] flex-1 sm:min-w-0 snap-center shrink-0 sm:shrink touch-manipulation bg-[#ebd2a4] border-3 border-[#c99a57] rounded-xs min-h-[160px] sm:min-h-[200px] flex flex-col items-center justify-center p-2.5 sm:p-3 relative cursor-pointer transition-all hover:bg-[#fae9c8] group shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] active:translate-y-0.5"
+                    className="w-[122px] min-w-[122px] max-w-[122px] sm:w-auto sm:min-w-0 sm:max-w-none flex-1 snap-center shrink-0 sm:shrink touch-manipulation bg-[#ebd2a4] border-3 border-[#c99a57] rounded-xs min-h-[160px] sm:min-h-[200px] flex flex-col items-center justify-center p-2.5 sm:p-3 relative cursor-pointer transition-all hover:bg-[#fae9c8] group shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] active:translate-y-0.5"
                   >
                     {player ? (
                       <>
@@ -190,11 +195,11 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                           withShadow={true}
                           animate={true}
                         />
-                        <div className="mt-2 text-center">
-                          <span className="font-pixel text-[10px] sm:text-xs text-[#5c3509] block leading-tight">
+                        <div className="mt-2 text-center w-full">
+                          <span className="font-pixel text-[10px] sm:text-xs text-[#5c3509] block leading-tight truncate">
                             {player.shortName}
                           </span>
-                          <span className="font-retro text-[9px] text-[#784610]">
+                          <span className="font-retro text-[9px] text-[#784610] block whitespace-nowrap">
                             #{player.uniformNumber} • {player.rating} OVR
                           </span>
                         </div>
@@ -216,7 +221,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                           isSilhouette={true}
                           size="md"
                         />
-                        <span className="mt-2 font-retro text-[10px] text-[#8c735d] group-hover:text-[#5c3509] transition-colors flex items-center gap-1">
+                        <span className="mt-2 font-retro text-[10px] text-[#8c735d] group-hover:text-[#5c3509] transition-colors flex items-center gap-1 whitespace-nowrap">
                           <Plus size={12} /> TAP TO PICK
                         </span>
                       </>
@@ -233,30 +238,30 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
           </div>
 
           {/* Bottom Panel: PASSING YARDS / RUSHING YARDS / TOUCHDOWNS matching Image 2 & 3 */}
-          <div className="pixel-box-cream p-4 sm:p-5 rounded-xs space-y-2.5 sm:space-y-3">
-            <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-2">
-              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider">
+          <div className="pixel-box-cream p-3 sm:p-5 rounded-xs space-y-2 sm:space-y-3">
+            <div className="flex justify-between items-center whitespace-nowrap border-b-2 border-[#d4a86a] pb-2">
+              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider whitespace-nowrap">
                 PASSING YARDS
               </span>
-              <span className="font-pixel text-xs sm:text-base text-[#5c3509]">
+              <span className="font-pixel text-xs sm:text-base text-[#5c3509] whitespace-nowrap ml-2">
                 {displayStats.passingYards.toLocaleString()}
               </span>
             </div>
 
-            <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-2">
-              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider">
+            <div className="flex justify-between items-center whitespace-nowrap border-b-2 border-[#d4a86a] pb-2">
+              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider whitespace-nowrap">
                 RUSHING YARDS
               </span>
-              <span className="font-pixel text-xs sm:text-base text-[#5c3509]">
+              <span className="font-pixel text-xs sm:text-base text-[#5c3509] whitespace-nowrap ml-2">
                 {displayStats.rushingYards.toLocaleString()}
               </span>
             </div>
 
-            <div className="flex items-center justify-between pb-1">
-              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider">
+            <div className="flex justify-between items-center whitespace-nowrap pb-0.5">
+              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider whitespace-nowrap">
                 TOUCHDOWNS
               </span>
-              <span className="font-pixel text-xs sm:text-base text-[#b45309] font-bold">
+              <span className="font-pixel text-xs sm:text-base text-[#b45309] font-bold whitespace-nowrap ml-2">
                 {displayStats.touchdowns}
               </span>
             </div>

@@ -2,9 +2,9 @@ import React from 'react';
 import { AvatarConfig } from '../types';
 
 interface PixelPlayerSpriteProps {
-  avatar?: AvatarConfig;
+  avatar?: Partial<AvatarConfig>;
   number?: number;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | number;
   isSilhouette?: boolean;
   withShadow?: boolean;
   className?: string;
@@ -26,17 +26,30 @@ export const PixelPlayerSprite: React.FC<PixelPlayerSpriteProps> = ({
   className = '',
   animate = false,
 }) => {
-  const displayNum = number ?? avatar.number ?? 88;
+  const displayNum = number ?? avatar?.number ?? 88;
 
   // Scaling dimensions
-  const scaleMap = {
+  const scaleMap: Record<string, { width: number; height: number }> = {
+    xs: { width: 36, height: 50 },
     sm: { width: 52, height: 72 },
     md: { width: 84, height: 116 },
     lg: { width: 140, height: 190 },
     xl: { width: 190, height: 260 },
   };
 
-  const { width, height } = scaleMap[size];
+  let width = 84;
+  let height = 116;
+
+  if (typeof size === 'number') {
+    width = size;
+    height = Math.round(size * 1.38);
+  } else if (size && scaleMap[size]) {
+    width = scaleMap[size].width;
+    height = scaleMap[size].height;
+  } else {
+    width = scaleMap.md.width;
+    height = scaleMap.md.height;
+  }
 
   if (isSilhouette) {
     // Exact grey-brown silhouette as seen in Image 2 and 3

@@ -58,7 +58,7 @@ export const LockerRoomModal: React.FC<LockerRoomModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-      <div className="relative w-full max-w-md md:max-w-xl bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-4 sm:p-6 rounded-xs text-[#5c3509] my-auto max-h-[92vh] overflow-y-auto">
+      <div className="relative w-full max-w-md md:max-w-xl bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-4 sm:p-6 rounded-xs text-[#5c3509] my-auto max-h-[90dvh] overflow-y-auto overscroll-contain">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b-3 border-[#e2ba7d] pb-3 mb-4">
