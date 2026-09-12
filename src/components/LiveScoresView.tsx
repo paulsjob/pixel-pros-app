@@ -80,7 +80,7 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
             LIVE MATCHES & STATS
           </h2>
           <div className="font-pixel text-[10px] sm:text-xs text-[#12579b] mt-1 tracking-widest">
-            WEEK 1 • LIVE ESPN FEED
+            WEEK 1 • LIVE FEED
           </div>
         </div>
 
@@ -94,7 +94,7 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
               </h3>
             </div>
             <span className="font-retro text-[10px] sm:text-[11px] text-[#784610] bg-[#fae9c8] px-2 sm:px-2.5 py-0.5 border border-[#d4a86a] rounded-xs font-semibold">
-              ESPN SYNC ACTIVE
+              LIVE SYNC ACTIVE
             </span>
           </div>
 
@@ -156,27 +156,27 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
           </div>
         </div>
 
-        {/* 2. Player Standings: Radically Minimal (ONLY 3 COLUMNS, NO SPREADSHEET BLOAT) */}
+        {/* 2. Standings Section: Strictly single-line header on any mobile screen */}
         <div className="w-full box-border">
-          <div className="flex items-center justify-between pb-2 mb-2 sm:mb-3 border-t-2 border-[#d4a86a] pt-3 sm:pt-4">
-            <div className="flex items-center gap-2">
-              <Trophy size={16} className="text-[#b45309] sm:w-[18px] sm:h-[18px]" />
-              <h3 className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase">
-                PLAYER STANDINGS
+          <div className="flex items-center justify-between w-full pb-2 mb-2 sm:mb-3 border-t-2 border-[#d4a86a] pt-3 sm:pt-4">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <Trophy size={16} className="text-[#b45309] sm:w-[18px] sm:h-[18px] shrink-0" />
+              <h3 className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase whitespace-nowrap">
+                <span className="hidden sm:inline">PLAYER </span>STANDINGS
               </h3>
             </div>
-            <span className="font-retro text-[10px] sm:text-[11px] text-[#784610] bg-[#fae9c8] px-2 sm:px-2.5 py-0.5 border border-[#d4a86a] rounded-xs">
-              SORTED BY SCORE
+            <span className="font-pixel text-[10px] sm:text-xs text-[#784610] bg-[#fae9c8] px-2 sm:px-2.5 py-0.5 border border-[#d4a86a] rounded-xs whitespace-nowrap shrink-0">
+              TOP SCORES
             </span>
           </div>
 
           {/* Clean 2-Column Table: Zero horizontal scrollbar on mobile or desktop */}
           <div className="w-full box-border border-3 border-[#c99a57] rounded-xs overflow-hidden bg-[#ebd2a4]">
-            <table className="w-full text-left font-retro text-xs sm:text-sm border-collapse">
+            <table className="w-full text-left font-retro text-xs sm:text-sm border-collapse table-fixed">
               <thead className="bg-[#dfbe89] font-pixel text-[10px] sm:text-xs text-[#5c3509] border-b-2 border-[#c99a57]">
                 <tr>
-                  <th className="py-2.5 px-2.5 sm:px-3 text-left">PLAYER</th>
-                  <th className="py-2.5 px-2.5 sm:px-3 text-right">SCORE</th>
+                  <th className="py-2.5 px-2 sm:px-3 text-left">PLAYER</th>
+                  <th className="py-2.5 px-2 sm:px-3 text-right w-28 sm:w-36 shrink-0 whitespace-nowrap">SCORE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#d4a86a]">
@@ -193,12 +193,12 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                         player.displayName === 'Jeerice Henry' ? 'bg-[#fae5b8]' : ''
                       }`}
                     >
-                      {/* Column 1: PLAYER (Rank badge + 8-bit sprite + Player Name & Team Abbr) */}
-                      <td className="py-2 sm:py-2.5 px-2.5 sm:px-3">
-                        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                      {/* Column 1: PLAYER (Takes remaining space, flex-1 min-w-0 pr-2, truncate player name) */}
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 min-w-0 pr-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
                           {/* Rank Badge */}
                           <span
-                            className={`shrink-0 font-pixel text-[10px] sm:text-xs px-1.5 py-0.5 rounded-xs border text-center min-w-[26px] ${
+                            className={`shrink-0 font-pixel text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.5 rounded-xs border text-center min-w-[24px] sm:min-w-[26px] ${
                               rank === 1
                                 ? 'bg-[#fbbf24] text-[#78350f] border-[#b45309] font-bold shadow-xs'
                                 : rank === 2
@@ -212,11 +212,11 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                           </span>
 
                           {/* Pixel Avatar Sprite */}
-                          <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center bg-[#fae9c8] border border-[#c99a57] rounded-xs overflow-hidden">
+                          <div className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 flex items-center justify-center bg-[#fae9c8] border border-[#c99a57] rounded-xs overflow-hidden">
                             <PixelPlayerSprite
                               avatar={player.avatar}
                               number={player.uniformNumber}
-                              size={24}
+                              size={22}
                             />
                           </div>
 
@@ -232,10 +232,10 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                         </div>
                       </td>
 
-                      {/* Column 2: SCORE (Bold retro score badge right-aligned, e.g. "16,800 PTS") */}
-                      <td className="py-2 sm:py-2.5 px-2.5 sm:px-3 text-right shrink-0">
+                      {/* Column 2: SCORE (flex-shrink-0 whitespace-nowrap, solid comfortable fit, right-aligned) */}
+                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-right shrink-0 whitespace-nowrap w-28 sm:w-36">
                         <span
-                          className={`inline-block font-pixel text-[10px] sm:text-xs px-2 sm:px-2.5 py-1 border-2 rounded-xs shadow-xs whitespace-nowrap ${
+                          className={`inline-block font-pixel text-xs sm:text-sm px-2 sm:px-2.5 py-1 border-2 rounded-xs shadow-xs whitespace-nowrap shrink-0 ${
                             isTopThree
                               ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] font-bold'
                               : 'bg-[#fae9c8] text-[#12579b] border-[#c99a57] font-bold'

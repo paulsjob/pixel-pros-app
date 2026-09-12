@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.sports (
 CREATE TABLE IF NOT EXISTS public.competitors (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sport_id TEXT NOT NULL REFERENCES public.sports(id) ON DELETE CASCADE,
-    external_provider_id TEXT,                 -- ESPN athlete ID for lightweight mapping
+    external_provider_id TEXT,                 -- External sports feed athlete ID for lightweight mapping
     display_name TEXT NOT NULL,                -- e.g. 'Patrick Mahomes'
     short_name TEXT NOT NULL,                  -- e.g. 'MAHOMES'
     uniform_number INTEGER NOT NULL DEFAULT 88,
@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_competitors_external_id ON public.competitors(ext
 CREATE TABLE IF NOT EXISTS public.matches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     sport_id TEXT NOT NULL REFERENCES public.sports(id) ON DELETE CASCADE,
-    external_match_id TEXT,                    -- ESPN gameId
+    external_match_id TEXT,                    -- External gameId
     home_competitor_name TEXT NOT NULL,        -- e.g. 'Chiefs'
     away_competitor_name TEXT NOT NULL,        -- e.g. 'Bills'
     scheduled_at TIMESTAMPTZ NOT NULL,
@@ -164,7 +164,7 @@ ON CONFLICT (sport_id, event_type) DO NOTHING;
 export const PYTHON_INGESTOR_CODE = `"""
 Pixel Pros Universal Data Ingestor (Python)
 ------------------------------------------------
-Polls raw sports feeds (ESPN / Sportradar), normalizes statistics
+Polls raw sports feeds (Sportradar / Live feeds), normalizes statistics
 into generic 'stat_primary' metrics, and upserts into Supabase.
 Frontend NEVER touches third-party APIs directly!
 """
@@ -178,8 +178,8 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "your-service
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-# ESPN NFL Scoreboard endpoint (free / public)
-ESPN_NFL_URL = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+# Live Sports Scoreboard endpoint (free / public)
+SPORTS_FEED_URL = "https://api.sportsdata.io/v3/nfl/scores/json/ScoresBasic"
 
 def normalize_stat(raw_stat_name: str, raw_value: int) -> tuple[str, int, int]:
     """
@@ -199,8 +199,8 @@ def normalize_stat(raw_stat_name: str, raw_value: int) -> tuple[str, int, int]:
     return ("stat_other", raw_value, 0)
 
 def ingest_live_events():
-    print("Fetching live data from ESPN...")
-    res = requests.get(ESPN_NFL_URL, timeout=10)
+    print("Fetching live data from sports provider...")
+    res = requests.get(SPORTS_FEED_URL, timeout=10)
     data = res.json()
     
     for event in data.get("events", []):

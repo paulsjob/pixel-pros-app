@@ -39,7 +39,7 @@ export const StatsMatchesModal: React.FC<StatsMatchesModalProps> = ({
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-2">
             <Activity size={16} className="text-[#12579b]" />
-            <span className="font-pixel text-xs text-[#12579b]">LIVE MATCHES FEED (ESPN SYNC)</span>
+            <span className="font-pixel text-xs text-[#12579b]">LIVE MATCHES FEED (LIVE SYNC)</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

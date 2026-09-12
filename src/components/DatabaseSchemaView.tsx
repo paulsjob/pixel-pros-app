@@ -516,7 +516,7 @@ export const DatabaseSchemaView: React.FC = () => {
         <div className="pixel-box-cream p-5 rounded-xs">
           <div className="flex items-center justify-between mb-3">
             <span className="font-pixel text-xs text-[#5c3509]">
-              PYTHON WORKER: ESPN NORMALIZER TO SUPABASE (ingestor.py)
+              PYTHON WORKER: LIVE STATS NORMALIZER TO SUPABASE (ingestor.py)
             </span>
             <button
               onClick={() => handleCopy(PYTHON_INGESTOR_CODE, 'py_ingest')}
