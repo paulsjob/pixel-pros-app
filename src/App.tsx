@@ -4,33 +4,32 @@ import {
   INITIAL_USER,
   INITIAL_LEADERBOARD_FRIENDS,
   INITIAL_LEADERBOARD_GLOBAL,
-  INITIAL_SPORTS,
+  LIVE_MATCHES,
 } from './data/mockData';
-import { Competitor, UserProfile, AvatarConfig, SportId } from './types';
+import { Competitor, UserProfile, AvatarConfig, Match } from './types';
 import { MyTeamView } from './components/MyTeamView';
 import { LeaderboardView } from './components/LeaderboardView';
+import { LiveScoresView } from './components/LiveScoresView';
+import { SimpleRulesView } from './components/SimpleRulesView';
 import { PlayerCardModal } from './components/PlayerCardModal';
 import { LockerRoomModal } from './components/LockerRoomModal';
 import { DatabaseSchemaView } from './components/DatabaseSchemaView';
-import { RulesScoringTester } from './components/RulesScoringTester';
-import { StatsMatchesModal } from './components/StatsMatchesModal';
-import { PixelCoin, PixelHelmetIcon } from './components/PixelBadges';
-import { Users, Trophy, Database, BookOpen, Shirt } from 'lucide-react';
+import { PixelHelmetIcon } from './components/PixelBadges';
+import { Users, Trophy, BookOpen, Shirt, Activity } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'team' | 'leaderboard' | 'database' | 'rules'>('team');
-  const [activeSport, setActiveSport] = useState<SportId>('nfl');
+  const [activeTab, setActiveTab] = useState<'team' | 'scores' | 'leaderboard' | 'rules' | 'database'>('team');
   
   // App state
   const [user, setUser] = useState<UserProfile>(INITIAL_USER);
   const [roster, setRoster] = useState<Competitor[]>(INITIAL_COMPETITORS);
+  const [matches, setMatches] = useState<Match[]>(LIVE_MATCHES);
   const [friendsList, setFriendsList] = useState(INITIAL_LEADERBOARD_FRIENDS);
   const [globalList] = useState(INITIAL_LEADERBOARD_GLOBAL);
 
   // Modals state
   const [detailedPlayer, setDetailedPlayer] = useState<Competitor | null>(null);
   const [isLockerRoomOpen, setIsLockerRoomOpen] = useState(false);
-  const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -137,6 +136,20 @@ export default function App() {
         return p;
       })
     );
+
+    // Update match score
+    setMatches(prev =>
+      prev.map(m =>
+        m.id === 'm1'
+          ? {
+              ...m,
+              homeScore: m.homeScore + points,
+              recentEvent: `${player.shortName} +${points} PTS (${eventName})`,
+            }
+          : m
+      )
+    );
+
     handleScorePoints(points, `${player.shortName} ${eventName}`);
   };
 
@@ -144,27 +157,27 @@ export default function App() {
     <div className="min-h-screen bg-[#0b1021] text-[#fae5b8] flex flex-col selection:bg-[#12579b] selection:text-white">
       
       {/* Universal 8-bit Top Bar */}
-      <header className="sticky top-0 z-40 bg-[#080d1a] border-b-3 border-[#1a264a] px-3 sm:px-6 py-3 shadow-md">
-        <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 bg-[#080d1a] border-b-3 border-[#1a264a] px-3 sm:px-6 py-2.5 sm:py-3 shadow-md">
+        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
           
           {/* Logo & Brand */}
           <div
             onClick={() => setActiveTab('team')}
             className="flex items-center gap-2 cursor-pointer group"
           >
-            <PixelHelmetIcon size={30} color={user.avatar.helmetColor} />
-            <span className="font-pixel text-base sm:text-lg text-[#fae5b8] tracking-widest group-hover:text-[#ffffff] transition-colors">
+            <PixelHelmetIcon size={28} color={user.avatar.helmetColor} />
+            <span className="font-pixel text-sm sm:text-base text-[#fae5b8] tracking-widest group-hover:text-[#ffffff] transition-colors">
               PIXEL PROS
             </span>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Clean 4-Tab Navigation */}
           <nav className="flex items-center gap-1 sm:gap-2">
             {[
               { id: 'team', label: 'MY TEAM', icon: Users },
+              { id: 'scores', label: 'LIVE SCORES', icon: Activity },
               { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
               { id: 'rules', label: 'RULES', icon: BookOpen },
-              { id: 'database', label: 'SUPABASE / SQL', icon: Database },
             ].map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -172,20 +185,20 @@ export default function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`touch-manipulation flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
+                  className={`touch-manipulation flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
                     isActive
                       ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
                       : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
                   }`}
                 >
-                  <Icon size={13} />
+                  <Icon size={14} className={isActive ? 'text-[#38bdf8]' : ''} />
                   <span className="hidden xs:inline">{tab.label}</span>
                 </button>
               );
             })}
           </nav>
 
-          {/* User Status Badges */}
+          {/* User Status & Gear Locker Room */}
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-[#1a2238] border border-[#273552] rounded-xs font-pixel text-[10px] text-[#fae5b8]">
               <span className="text-[#38bdf8]">SCORE:</span> {user.totalScore.toLocaleString()}
@@ -193,7 +206,7 @@ export default function App() {
             
             <button
               onClick={() => setIsLockerRoomOpen(true)}
-              className="touch-manipulation flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none"
+              className="touch-manipulation flex items-center gap-1 px-2.5 py-1 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none"
               title="Open Locker Room"
             >
               <Shirt size={13} />
@@ -240,8 +253,17 @@ export default function App() {
               onSelectSlot={handleSelectSlot}
               onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
               onOpenLockerRoom={() => setIsLockerRoomOpen(true)}
-              onOpenStatsModal={() => setIsStatsOpen(true)}
+              onOpenStatsModal={() => setActiveTab('scores')}
               onTogglePlayer={handleTogglePlayer}
+            />
+          )}
+
+          {activeTab === 'scores' && (
+            <LiveScoresView
+              matches={matches}
+              competitors={roster}
+              onSelectPlayer={(player) => setDetailedPlayer(player)}
+              onSimulatePlay={handleSimulatePlay}
             />
           )}
 
@@ -258,9 +280,7 @@ export default function App() {
           )}
 
           {activeTab === 'rules' && (
-            <div className="space-y-6">
-              <RulesScoringTester onScorePoints={handleScorePoints} />
-            </div>
+            <SimpleRulesView />
           )}
 
           {activeTab === 'database' && (
@@ -274,16 +294,21 @@ export default function App() {
       <footer className="bg-[#080d1a] border-t-3 border-[#1a264a] py-4 px-4 sm:px-6 text-center text-xs font-retro text-[#fae5b8]/70">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            <strong>PIXEL PROS</strong> • Family-Friendly 8-Bit Fantasy Sports • Universal Data Layer
+            <strong>PIXEL PROS</strong> • Family-Friendly 8-Bit Fantasy Sports • Whole Numbers Only
           </div>
           <div className="flex items-center gap-4 text-[11px]">
-            <span>Supabase: sqntjgjqtwbcqpxcqzbg</span>
+            <button
+              onClick={() => setActiveTab('rules')}
+              className="touch-manipulation hover:underline text-[#fae5b8] cursor-pointer"
+            >
+              Scoring Rules
+            </button>
             <span>•</span>
             <button
               onClick={() => setActiveTab('database')}
               className="touch-manipulation hover:underline text-[#38bdf8] cursor-pointer"
             >
-              View PostgreSQL Schema
+              Supabase / SQL
             </button>
           </div>
         </div>
@@ -308,14 +333,6 @@ export default function App() {
           userCoins={user.coins}
           onSaveAvatar={handleSaveAvatar}
           onClose={() => setIsLockerRoomOpen(false)}
-        />
-      )}
-
-      {isStatsOpen && (
-        <StatsMatchesModal
-          roster={roster}
-          onClose={() => setIsStatsOpen(false)}
-          onSimulatePlay={handleSimulatePlay}
         />
       )}
 
