@@ -53,7 +53,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
   });
 
   return (
-    <div className="w-full max-w-md md:max-w-5xl mx-auto px-1 sm:px-0">
+    <div className="w-full max-w-md md:max-w-5xl mx-auto px-0 box-border overflow-hidden">
       {/* Top Banner Header matching Image 3 */}
       <div className="text-center mb-5 sm:mb-6">
         <div className="flex items-center justify-center gap-2.5 mb-1">
@@ -147,20 +147,20 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
           {/* STATS Button matching bottom left of Image 3 */}
           <button
             onClick={onOpenStatsModal}
-            className="touch-manipulation w-full py-3.5 sm:py-4 bg-[#12579b] hover:bg-[#186abb] text-[#fae5b8] font-pixel text-xs sm:text-sm border-3 border-[#0a2d52] shadow-[0_4px_0_0_#051a30] cursor-pointer flex items-center justify-center gap-2.5 active:translate-y-0.5 active:shadow-none transition-all"
+            className="touch-manipulation w-full px-4 py-2.5 sm:py-3 bg-[#12579b] hover:bg-[#186abb] text-[#fae5b8] font-pixel text-xs sm:text-sm border-3 border-[#0a2d52] shadow-[0_4px_0_0_#051a30] cursor-pointer flex items-center justify-center gap-2 text-center active:translate-y-0.5 active:shadow-none transition-all box-border"
           >
-            <BarChart3 size={18} />
-            <span>STATS & LIVE MATCHES</span>
+            <BarChart3 size={18} className="shrink-0" />
+            <span className="leading-tight tracking-wider">STATS & LIVE MATCHES</span>
           </button>
 
         </div>
 
         {/* RIGHT COLUMN: 3 Selected Players + Stats Box + Locker Room */}
-        <div className="md:col-span-8 flex flex-col gap-5 sm:gap-6">
+        <div className="md:col-span-8 flex flex-col gap-4 sm:gap-6 w-full max-w-full overflow-hidden box-border">
           
           {/* Top Panel: SELECT 3 PLAYERS FOR THIS WEEK */}
-          <div className="pixel-box-cream p-4 sm:p-5 rounded-xs">
-            <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-2.5 mb-4">
+          <div className="pixel-box-cream p-3 sm:p-5 rounded-xs w-full max-w-full overflow-hidden box-border">
+            <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-2.5 mb-3 sm:mb-4">
               <h2 className="font-pixel text-xs sm:text-base text-[#5c3509] tracking-wider uppercase">
                 SELECT 3 PLAYERS FOR THIS WEEK
               </h2>
@@ -169,8 +169,8 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               </span>
             </div>
 
-            {/* 3 Active Player Slots: Horizontal Scroll Row on Mobile, 3-Column Grid on Tablet/Desktop */}
-            <div className="flex sm:grid sm:grid-cols-3 gap-2 sm:gap-4 overflow-x-auto sm:overflow-visible pb-2 sm:pb-0 snap-x snap-mandatory overscroll-contain">
+            {/* 3 Active Player Slots: Horizontal Scroll Row strictly contained inside slots track on mobile */}
+            <div className="w-full overflow-x-auto snap-x snap-mandatory flex sm:grid sm:grid-cols-3 gap-2 sm:gap-4 pb-1 sm:pb-0 overscroll-contain">
               {[0, 1, 2].map(slotIndex => {
                 const player = safeSelected[slotIndex];
 
@@ -184,7 +184,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                         onSelectSlot(slotIndex);
                       }
                     }}
-                    className="w-[122px] min-w-[122px] max-w-[122px] sm:w-auto sm:min-w-0 sm:max-w-none flex-1 snap-center shrink-0 sm:shrink touch-manipulation bg-[#ebd2a4] border-3 border-[#c99a57] rounded-xs min-h-[160px] sm:min-h-[200px] flex flex-col items-center justify-center p-2.5 sm:p-3 relative cursor-pointer transition-all hover:bg-[#fae9c8] group shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] active:translate-y-0.5"
+                    className="w-[112px] min-w-[112px] max-w-[124px] sm:w-auto sm:min-w-0 sm:max-w-none flex-1 snap-center shrink-0 sm:shrink touch-manipulation bg-[#ebd2a4] border-3 border-[#c99a57] rounded-xs min-h-[160px] sm:min-h-[190px] flex flex-col items-center justify-center p-2 sm:p-3 relative cursor-pointer transition-all hover:bg-[#fae9c8] group shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)] active:translate-y-0.5 box-border"
                   >
                     {player ? (
                       <>

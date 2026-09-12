@@ -170,14 +170,13 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
             </span>
           </div>
 
-          {/* Clean 3-Column Table: Zero horizontal scrollbar on mobile or desktop */}
+          {/* Clean 2-Column Table: Zero horizontal scrollbar on mobile or desktop */}
           <div className="w-full box-border border-3 border-[#c99a57] rounded-xs overflow-hidden bg-[#ebd2a4]">
             <table className="w-full text-left font-retro text-xs sm:text-sm border-collapse">
               <thead className="bg-[#dfbe89] font-pixel text-[10px] sm:text-xs text-[#5c3509] border-b-2 border-[#c99a57]">
                 <tr>
-                  <th className="py-2.5 px-2 sm:px-3 text-left">RANK & PLAYER</th>
-                  <th className="py-2.5 px-2 text-center w-16 sm:w-20">TEAM</th>
-                  <th className="py-2.5 px-2 sm:px-3 text-right w-28 sm:w-36">SCORE</th>
+                  <th className="py-2.5 px-2.5 sm:px-3 text-left">PLAYER</th>
+                  <th className="py-2.5 px-2.5 sm:px-3 text-right">SCORE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#d4a86a]">
@@ -194,8 +193,8 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                         player.displayName === 'Jeerice Henry' ? 'bg-[#fae5b8]' : ''
                       }`}
                     >
-                      {/* Column 1: RANK & PLAYER (Rank badge + pixel avatar sprite + Player Name) */}
-                      <td className="py-2 sm:py-2.5 px-2 sm:px-3">
+                      {/* Column 1: PLAYER (Rank badge + 8-bit sprite + Player Name & Team Abbr) */}
+                      <td className="py-2 sm:py-2.5 px-2.5 sm:px-3">
                         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                           {/* Rank Badge */}
                           <span
@@ -221,27 +220,20 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                             />
                           </div>
 
-                          {/* Player Name */}
-                          <div className="min-w-0 flex-1 truncate">
+                          {/* Player Name + Team Abbreviation directly under/next to the name */}
+                          <div className="min-w-0 flex-1">
                             <span className="font-pixel text-[11px] sm:text-xs text-[#5c3509] block leading-tight truncate">
                               {player.displayName}
                             </span>
-                            <span className="text-[10px] text-[#784610] font-retro hidden xs:inline">
-                              #{player.uniformNumber} • {player.positionGeneric}
+                            <span className="text-[10px] text-[#784610] font-retro block leading-tight truncate mt-0.5">
+                              {teamAbbr} • #{player.uniformNumber} {player.positionGeneric ? `• ${player.positionGeneric}` : ''}
                             </span>
                           </div>
                         </div>
                       </td>
 
-                      {/* Column 2: TEAM (3-letter abbreviation badge, e.g. "GSW", "MIA", "DAL", "BUF") */}
-                      <td className="py-2 sm:py-2.5 px-2 text-center shrink-0">
-                        <span className="inline-block px-1.5 sm:px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs font-pixel text-[10px] sm:text-xs text-[#784610] font-bold tracking-wider">
-                          {teamAbbr}
-                        </span>
-                      </td>
-
-                      {/* Column 3: SCORE (Large bold blue whole-number score badge, e.g. "16,800 PTS") */}
-                      <td className="py-2 sm:py-2.5 px-2 sm:px-3 text-right shrink-0">
+                      {/* Column 2: SCORE (Bold retro score badge right-aligned, e.g. "16,800 PTS") */}
+                      <td className="py-2 sm:py-2.5 px-2.5 sm:px-3 text-right shrink-0">
                         <span
                           className={`inline-block font-pixel text-[10px] sm:text-xs px-2 sm:px-2.5 py-1 border-2 rounded-xs shadow-xs whitespace-nowrap ${
                             isTopThree
