@@ -68,11 +68,13 @@ export default function App() {
   };
 
   // Open detail for slot selection
-  const handleSelectSlot = (index: number) => {
-    // Find first available player not in team
+  const handleSelectSlot = (_index: number) => {
+    // Find first available player not in team and open their card for immediate 1-tap addition
     const available = roster.find(p => !user.selectedPlayerIds.includes(p.id));
     if (available) {
-      handleTogglePlayer(available);
+      setDetailedPlayer(available);
+    } else {
+      showToast('Your 3-player lineup is already full! Remove a player to swap.');
     }
   };
 
@@ -157,7 +159,7 @@ export default function App() {
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1.5 sm:gap-2">
+          <nav className="flex items-center gap-1 sm:gap-2">
             {[
               { id: 'team', label: 'MY TEAM', icon: Users },
               { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
@@ -170,7 +172,7 @@ export default function App() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all ${
+                  className={`touch-manipulation flex items-center gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
                     isActive
                       ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
                       : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
@@ -191,7 +193,7 @@ export default function App() {
             
             <button
               onClick={() => setIsLockerRoomOpen(true)}
-              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none"
+              className="touch-manipulation flex items-center gap-1 px-2 sm:px-2.5 py-1 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none"
               title="Open Locker Room"
             >
               <Shirt size={13} />
@@ -213,7 +215,7 @@ export default function App() {
       )}
 
       {/* Main Container with Retro Football Field Texture */}
-      <main className="flex-1 football-field py-8 px-4 sm:px-6 relative">
+      <main className="flex-1 football-field py-5 sm:py-8 px-2 sm:px-6 relative">
         
         {/* Yard Lines Overlay on Football Field (Image 2 & 3 atmosphere) */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden flex justify-between items-center opacity-20 px-8 text-white font-pixel text-4xl select-none">
@@ -229,7 +231,7 @@ export default function App() {
         </div>
 
         {/* Content Views */}
-        <div className="relative z-10">
+        <div className="relative z-10 w-full max-w-md md:max-w-5xl mx-auto">
           {activeTab === 'team' && (
             <MyTeamView
               roster={roster}
@@ -269,7 +271,7 @@ export default function App() {
       </main>
 
       {/* Footer Info */}
-      <footer className="bg-[#080d1a] border-t-3 border-[#1a264a] py-4 px-6 text-center text-xs font-retro text-[#fae5b8]/70">
+      <footer className="bg-[#080d1a] border-t-3 border-[#1a264a] py-4 px-4 sm:px-6 text-center text-xs font-retro text-[#fae5b8]/70">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
             <strong>PIXEL PROS</strong> • Family-Friendly 8-Bit Fantasy Sports • Universal Data Layer
@@ -279,7 +281,7 @@ export default function App() {
             <span>•</span>
             <button
               onClick={() => setActiveTab('database')}
-              className="hover:underline text-[#38bdf8] cursor-pointer"
+              className="touch-manipulation hover:underline text-[#38bdf8] cursor-pointer"
             >
               View PostgreSQL Schema
             </button>
@@ -292,7 +294,10 @@ export default function App() {
         <PlayerCardModal
           player={detailedPlayer}
           onClose={() => setDetailedPlayer(null)}
-          onSelectForTeam={handleTogglePlayer}
+          onSelectForTeam={(player) => {
+            handleTogglePlayer(player);
+            setDetailedPlayer(null);
+          }}
           isSelectedForTeam={user.selectedPlayerIds.includes(detailedPlayer.id)}
         />
       )}
