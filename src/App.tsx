@@ -15,10 +15,10 @@ import { PlayerCardModal } from './components/PlayerCardModal';
 import { LockerRoomModal } from './components/LockerRoomModal';
 import { DatabaseSchemaView } from './components/DatabaseSchemaView';
 import { PixelHelmetIcon } from './components/PixelBadges';
-import { Users, Trophy, BookOpen, Shirt, Activity } from 'lucide-react';
+import { Users, Trophy, BookOpen, Shirt, Activity, Database } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'team' | 'scores' | 'leaderboard' | 'rules' | 'database'>('team');
+  const [activeTab, setActiveTab] = useState<'team' | 'live' | 'leaderboard' | 'rules'>('team');
   
   // App state
   const [user, setUser] = useState<UserProfile>(INITIAL_USER);
@@ -30,6 +30,7 @@ export default function App() {
   // Modals state
   const [detailedPlayer, setDetailedPlayer] = useState<Competitor | null>(null);
   const [isLockerRoomOpen, setIsLockerRoomOpen] = useState(false);
+  const [isDbDrawerOpen, setIsDbDrawerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -175,7 +176,7 @@ export default function App() {
           <nav className="flex items-center gap-1 sm:gap-2">
             {[
               { id: 'team', label: 'MY TEAM', icon: Users },
-              { id: 'scores', label: 'LIVE SCORES', icon: Activity },
+              { id: 'live', label: 'LIVE SCORES', icon: Activity },
               { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
               { id: 'rules', label: 'RULES', icon: BookOpen },
             ].map(tab => {
@@ -253,12 +254,12 @@ export default function App() {
               onSelectSlot={handleSelectSlot}
               onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
               onOpenLockerRoom={() => setIsLockerRoomOpen(true)}
-              onOpenStatsModal={() => setActiveTab('scores')}
+              onOpenStatsModal={() => setActiveTab('live')}
               onTogglePlayer={handleTogglePlayer}
             />
           )}
 
-          {activeTab === 'scores' && (
+          {activeTab === 'live' && (
             <LiveScoresView
               matches={matches}
               competitors={roster}
@@ -282,37 +283,60 @@ export default function App() {
           {activeTab === 'rules' && (
             <SimpleRulesView />
           )}
-
-          {activeTab === 'database' && (
-            <DatabaseSchemaView />
-          )}
         </div>
 
       </main>
 
       {/* Footer Info */}
-      <footer className="bg-[#080d1a] border-t-3 border-[#1a264a] py-4 px-4 sm:px-6 text-center text-xs font-retro text-[#fae5b8]/70">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <footer className="bg-[#080d1a] border-t-3 border-[#1a264a] py-3.5 px-4 sm:px-6 text-center text-xs font-retro text-[#fae5b8]/70">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
           <div>
             <strong>PIXEL PROS</strong> • Family-Friendly 8-Bit Fantasy Sports • Whole Numbers Only
           </div>
-          <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex items-center gap-3 text-[11px]">
             <button
               onClick={() => setActiveTab('rules')}
               className="touch-manipulation hover:underline text-[#fae5b8] cursor-pointer"
             >
               Scoring Rules
             </button>
-            <span>•</span>
+            <span className="text-[#334155]">•</span>
             <button
-              onClick={() => setActiveTab('database')}
-              className="touch-manipulation hover:underline text-[#38bdf8] cursor-pointer"
+              onClick={() => setIsDbDrawerOpen(true)}
+              className="touch-manipulation font-mono text-[10px] text-[#64748b] hover:text-[#38bdf8] transition-colors cursor-pointer"
+              title="Open Supabase / SQL Developer Architecture"
             >
-              Supabase / SQL
+              [DEV / DB]
             </button>
           </div>
         </div>
       </footer>
+
+      {/* Collapsible Supabase / SQL Developer Drawer */}
+      {isDbDrawerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-4xl max-h-[90vh] bg-[#0b1021] border-4 border-[#1a264a] shadow-[0_10px_0_0_#050811] p-4 sm:p-6 rounded-xs text-[#fae5b8] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b-2 border-[#1a264a] pb-3 mb-4 shrink-0">
+              <div className="flex items-center gap-2">
+                <Database size={20} className="text-[#38bdf8]" />
+                <h2 className="font-pixel text-xs sm:text-sm text-[#fae5b8] tracking-wider uppercase">
+                  DEVELOPER & DATABASE ARCHITECTURE
+                </h2>
+              </div>
+              <button
+                onClick={() => setIsDbDrawerOpen(false)}
+                className="touch-manipulation w-8 h-8 bg-[#b91c1c] hover:bg-[#991b1b] text-white border-2 border-[#1a2238] flex items-center justify-center font-pixel text-xs cursor-pointer shadow-[0_2px_0_0_#450a0a] active:translate-y-0.5"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 pr-1">
+              <DatabaseSchemaView />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {detailedPlayer && (
