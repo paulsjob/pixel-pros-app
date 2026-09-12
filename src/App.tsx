@@ -160,23 +160,23 @@ export default function App() {
     <ErrorBoundary>
       <div className="h-[100dvh] flex flex-col overflow-hidden bg-[#0b1021] text-[#fae5b8] selection:bg-[#12579b] selection:text-white">
         
-        {/* Universal 8-bit Top Bar (Strict Single-Row Containment) */}
-        <header className="flex-shrink-0 z-40 bg-[#080d1a] border-b-3 border-[#1a264a] px-2 sm:px-6 py-1.5 sm:py-2.5 shadow-md">
-          <div className="max-w-5xl mx-auto flex items-center justify-between gap-1.5 sm:gap-4 flex-nowrap">
+        {/* Universal 8-bit Top Bar (Strict Single-Row Containment & Mobile-Optimized) */}
+        <header className="flex-shrink-0 z-40 bg-[#080d1a] border-b-3 border-[#1a264a] w-full max-w-full px-2 sm:px-4 py-1.5 sm:py-2 shadow-md overflow-x-hidden box-border">
+          <div className="w-full max-w-full flex items-center justify-between gap-1 sm:gap-3 flex-nowrap overflow-x-hidden">
             
             {/* Logo & Brand */}
             <button
               onClick={() => setCurrentTab('team')}
-              className="touch-manipulation flex items-center gap-1.5 sm:gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left shrink-0"
+              className="touch-manipulation flex items-center gap-1 sm:gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left shrink-0"
               title="Return to My Team"
             >
-              <PixelHelmetIcon size={24} color={user?.avatar?.helmetColor || '#155e9e'} />
-              <span className="font-pixel text-xs sm:text-base text-[#fae5b8] tracking-wider group-hover:text-[#ffffff] transition-colors whitespace-nowrap">
+              <PixelHelmetIcon size={22} color={user?.avatar?.helmetColor || '#155e9e'} />
+              <span className="font-pixel text-[11px] sm:text-base text-[#fae5b8] tracking-wider group-hover:text-[#ffffff] transition-colors whitespace-nowrap">
                 PIXEL PROS
               </span>
             </button>
 
-            {/* Clean 4-Tab Navigation with Comfortable Touch Targets (min-h-[38px] min-w-[38px]) */}
+            {/* Clean 4-Tab Navigation (Icon-Only on Mobile, Icon + Text on sm+) */}
             <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {[
                 { id: 'team', label: 'MY TEAM', icon: Users },
@@ -190,7 +190,7 @@ export default function App() {
                   <button
                     key={tab.id}
                     onClick={() => setCurrentTab(tab.id as any)}
-                    className={`touch-manipulation min-h-[38px] min-w-[38px] flex items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
+                    className={`touch-manipulation p-2 sm:px-3 sm:py-2 min-w-[38px] sm:min-w-[40px] flex items-center justify-center gap-1.5 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
                       isActive
                         ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
                         : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
@@ -198,25 +198,31 @@ export default function App() {
                     title={tab.label}
                   >
                     <Icon size={16} className={isActive ? 'text-[#38bdf8]' : ''} />
-                    <span className="hidden md:inline whitespace-nowrap">{tab.label}</span>
+                    <span className="hidden sm:inline whitespace-nowrap">{tab.label}</span>
                   </button>
                 );
               })}
             </nav>
 
             {/* User Status & Gear Locker Room */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              <div className="flex items-center gap-1 px-2 py-1.5 bg-[#1a2238] border border-[#273552] rounded-xs font-pixel text-[10px] sm:text-xs text-[#fae5b8] whitespace-nowrap">
-                <span className="text-[#38bdf8] hidden sm:inline">SCORE:</span>
-                <span>{(user?.totalScore ?? 0) >= 10000 ? `${((user?.totalScore ?? 0) / 1000).toFixed(1)}K` : (user?.totalScore ?? 0).toLocaleString()}</span>
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              {/* Compact Score Badge on Mobile (Hide "SCORE:" label under 640px) */}
+              <div className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 sm:py-2 bg-[#1a2238] border border-[#273552] rounded-xs font-pixel text-[10px] sm:text-xs text-[#fae5b8] whitespace-nowrap">
+                <span className="text-[#38bdf8] hidden sm:inline">SCORE: </span>
+                <span>
+                  {(user?.totalScore ?? 0) >= 10000
+                    ? `${((user?.totalScore ?? 0) / 1000).toFixed(1)}K`
+                    : (user?.totalScore ?? 0).toLocaleString()}
+                </span>
               </div>
               
+              {/* Compact Gear Button on Mobile (Icon only under 640px) */}
               <button
                 onClick={() => setIsLockerRoomOpen(true)}
-                className="touch-manipulation min-h-[38px] flex items-center gap-1 px-2.5 py-1.5 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] sm:text-xs cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none shrink-0"
+                className="touch-manipulation p-2 sm:px-2.5 sm:py-1.5 min-w-[36px] sm:min-w-0 flex items-center justify-center gap-1 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] sm:text-xs cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none shrink-0"
                 title="Open Locker Room"
               >
-                <Shirt size={14} />
+                <Shirt size={15} />
                 <span className="hidden sm:inline">GEAR</span>
               </button>
             </div>
