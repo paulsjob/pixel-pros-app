@@ -52,6 +52,8 @@ export interface Match {
   sportId: SportId;
   homeTeam: string;
   awayTeam: string;
+  homeTeamCode?: string;
+  awayTeamCode?: string;
   status: 'upcoming' | 'live' | 'final';
   periodLabel: string;
   homeScore: number;

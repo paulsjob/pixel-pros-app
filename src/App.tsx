@@ -235,7 +235,7 @@ export default function App() {
         )}
 
         {/* Main Container with Retro Football Field Texture (Scrolls internally) */}
-        <main className="flex-1 overflow-y-auto px-2 py-3 sm:px-6 sm:py-6 overscroll-contain football-field relative">
+        <main className="flex-1 overflow-y-auto px-2 py-2 sm:px-6 sm:py-4 overscroll-contain football-field relative box-border">
           
           {/* Yard Lines Overlay on Football Field */}
           <div className="pointer-events-none absolute inset-0 overflow-hidden flex justify-between items-center opacity-15 px-4 sm:px-8 text-white font-pixel text-2xl sm:text-4xl select-none">
@@ -251,7 +251,7 @@ export default function App() {
           </div>
 
           {/* Content Views */}
-          <div className="relative z-10 w-full max-w-md md:max-w-5xl mx-auto pb-4">
+          <div className="relative z-10 w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-4 box-border">
             {currentTab === 'team' && (
               <MyTeamView
                 roster={roster}
