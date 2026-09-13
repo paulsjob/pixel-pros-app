@@ -1,55 +1,99 @@
 import React, { useState, useMemo } from 'react';
-import { Competitor } from '../types';
+import { Competitor, Match, ActiveSlot } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
-import { X, Search, Check, Sparkles } from 'lucide-react';
-import { formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
+import { X, Search, Sparkles } from 'lucide-react';
+import { splitPlayerFirstLastName } from '../utils/formatters';
+import { NFL_MATCH_SLATE, TOP_12_SUPERSTARS_IDS } from '../data/nflAthletesPool';
 
 interface PlayerPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  slotIndex: number;
+  activeSlot: ActiveSlot;
   allPlayers: Competitor[];
-  selectedPlayerIds: string[];
-  onSelectPlayer: (player: Competitor, slotIndex: number) => void;
+  currentSlotPlayerId?: string | null;
+  selectedPlayerIds?: string[];
+  matches?: Match[];
+  onSelectPlayer: (player: Competitor, targetSlot: ActiveSlot) => void;
 }
+
+const SLOT_TITLES: Record<ActiveSlot, string> = {
+  star1: 'STAR 1',
+  star2: 'STAR 2',
+  star3: 'STAR 3',
+};
 
 export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
   isOpen,
   onClose,
-  slotIndex,
+  activeSlot,
   allPlayers = [],
+  currentSlotPlayerId,
   selectedPlayerIds = [],
+  matches = [],
   onSelectPlayer,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedGameFilter, setSelectedGameFilter] = useState<string>('ALL');
 
+  // Available match slate for the game filter pills
+  const activeMatches = useMemo(() => {
+    return matches && matches.length > 0 ? matches : NFL_MATCH_SLATE;
+  }, [matches]);
+
+  // Household superstars for the pinned row
+  const superstarPlayers = useMemo(() => {
+    const list = Array.isArray(allPlayers) ? allPlayers : [];
+    return TOP_12_SUPERSTARS_IDS.map((id) =>
+      list.find((p) => p.id.toLowerCase() === id.toLowerCase() || p.shortName.toLowerCase() === id.toLowerCase())
+    ).filter(Boolean) as Competitor[];
+  }, [allPlayers]);
+
+  // Selected game filter match object (if not ALL)
+  const activeMatchObj = useMemo(() => {
+    if (selectedGameFilter === 'ALL') return null;
+    return activeMatches.find((m) => m.id === selectedGameFilter) || null;
+  }, [selectedGameFilter, activeMatches]);
+
+  // Filtered players list based on match filter & search query
   const filteredPlayers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const list = Array.isArray(allPlayers) ? allPlayers : [];
-    if (!q) {
-      return list.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+    let list = Array.isArray(allPlayers) ? [...allPlayers] : [];
+
+    // Filter by selected game first
+    if (activeMatchObj) {
+      const away = (activeMatchObj.awayTeamCode || '').toUpperCase();
+      const home = (activeMatchObj.homeTeamCode || '').toUpperCase();
+      list = list.filter((p) => {
+        const code = (p.teamCode || '').toUpperCase();
+        return code === away || code === home;
+      });
     }
-    return list
-      .filter(
+
+    // Filter by search query if typed
+    if (q) {
+      list = list.filter(
         (p) =>
           p.displayName.toLowerCase().includes(q) ||
           p.shortName.toLowerCase().includes(q) ||
           p.teamName.toLowerCase().includes(q) ||
           p.teamCode.toLowerCase().includes(q) ||
           (p.position && p.position.toLowerCase().includes(q))
-      )
-      .sort((a, b) => (b.score || 0) - (a.score || 0));
-  }, [allPlayers, searchQuery]);
+      );
+    }
+
+    // Sort by points descending so live top scorers lead the list
+    return list.sort((a, b) => (b.score || 0) - (a.score || 0));
+  }, [allPlayers, activeMatchObj, searchQuery]);
 
   if (!isOpen) return null;
 
-  const currentSlotPlayerId = selectedPlayerIds[slotIndex];
+  const targetTitle = SLOT_TITLES[activeSlot] || 'STAR';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-3 sm:p-5 rounded-xs my-auto max-h-[92vh] flex flex-col box-border">
+      <div className="relative w-full max-w-2xl bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-3 sm:p-5 rounded-xs my-auto max-h-[94vh] flex flex-col box-border">
         
-        {/* Red Close Button */}
+        {/* Red Retro Close Button */}
         <button
           onClick={onClose}
           className="touch-manipulation absolute -top-3 -right-3 w-8 h-8 sm:w-9 sm:h-9 bg-[#b91c1c] text-[#fae5b8] border-2 border-[#1a2238] flex items-center justify-center cursor-pointer shadow-[0_3px_0_0_#450a0a] active:translate-y-1 active:shadow-none transition-all font-pixel text-xs z-10"
@@ -59,29 +103,135 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
         </button>
 
         {/* Modal Header */}
-        <div className="text-center pb-2.5 sm:pb-3 border-b-2 border-[#d4a86a] shrink-0">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-xs sm:text-sm border border-[#0a2d52] shadow-[0_2px_0_0_#051a30] mb-1.5">
+        <div className="text-center pb-2 border-b-2 border-[#d4a86a] shrink-0">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-xs sm:text-sm border border-[#0a2d52] shadow-[0_2px_0_0_#051a30] mb-1">
             <Sparkles size={14} className="text-[#fde047]" />
-            <span>SELECT STAR {slotIndex + 1}</span>
+            <span>PICK YOUR {targetTitle}</span>
           </div>
           <h2 className="font-pixel text-sm sm:text-base text-[#5c3509] tracking-wider uppercase">
-            CHOOSE ACTIVE NFL STAR
+            WHOLE-NUMBER NFL STAR PICKER
           </h2>
-          <p className="font-retro text-[10px] sm:text-[11px] text-[#784610] mt-0.5">
-            Hydrated live from Supabase competitors table (no position limits)
+          <p className="font-retro text-[10px] sm:text-[11px] text-[#784610]">
+            Tap a game pill to pick guys from the match on TV, or grab a superstar below!
           </p>
         </div>
 
-        {/* Search Bar */}
-        <div className="mt-2.5 mb-2 shrink-0">
+        {/* MATCH FILTER TABS: Horizontal Touch-Friendly Game Pills */}
+        <div className="mt-2.5 pb-1 shrink-0">
+          <div className="text-[10px] font-pixel text-[#784610] uppercase mb-1 flex items-center gap-1">
+            <span>📺 FILTER BY GAME ON TV:</span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar touch-pan-x">
+            {/* [ ALL ] Pill */}
+            <button
+              onClick={() => setSelectedGameFilter('ALL')}
+              className={`touch-manipulation px-2.5 py-1.5 font-pixel text-[10px] sm:text-xs border-2 rounded-xs shrink-0 whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 ${
+                selectedGameFilter === 'ALL'
+                  ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
+                  : 'bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-[#c99a57]'
+              }`}
+            >
+              ★ ALL PLAYERS
+            </button>
+
+            {/* Individual Game Pills: [ BUF vs HOU ] [ CLE vs JAX ] ... */}
+            {activeMatches.map((match) => {
+              const isSelected = selectedGameFilter === match.id;
+              return (
+                <button
+                  key={match.id}
+                  onClick={() => setSelectedGameFilter(match.id)}
+                  className={`touch-manipulation px-2 py-1.5 font-pixel text-[10px] sm:text-xs border-2 rounded-xs shrink-0 whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 ${
+                    isSelected
+                      ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
+                      : 'bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-[#c99a57]'
+                  }`}
+                >
+                  <span className="font-bold">{match.awayTeamCode}</span>
+                  <span className="opacity-70 mx-1">@</span>
+                  <span className="font-bold">{match.homeTeamCode}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* PINNED TOP SUPERSTARS ROW: One-Tap Access to Household Stars */}
+        {selectedGameFilter === 'ALL' && !searchQuery && (
+          <div className="mb-2 shrink-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-pixel text-[#784610] uppercase flex items-center gap-1">
+                <span className="text-[#b45309]">★</span> TOP SUPERSTARS:
+              </span>
+              <span className="text-[9px] font-retro text-[#784610]">One-tap quick assign</span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar touch-pan-x">
+              {superstarPlayers.map((player) => {
+                const isCurrentSlot = player.id === currentSlotPlayerId;
+                const { firstName, lastName } = splitPlayerFirstLastName(player.displayName);
+                return (
+                  <button
+                    key={player.id}
+                    onClick={() => {
+                      onSelectPlayer(player, activeSlot);
+                      onClose();
+                    }}
+                    className={`touch-manipulation flex flex-col items-center justify-between p-2 min-w-[110px] sm:min-w-[124px] border-2 rounded-xs shrink-0 cursor-pointer transition-all active:translate-y-0.5 ${
+                      isCurrentSlot
+                        ? 'bg-[#155e9e] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
+                        : 'bg-[#fae5b8] hover:bg-[#fff5e0] text-[#5c3509] border-[#c99a57]'
+                    }`}
+                  >
+                    <div className="w-full flex items-center justify-between gap-1 mb-1">
+                      <span className="px-1 py-0.2 bg-[#12579b] text-[#fae5b8] font-pixel text-[8px] rounded-2xs font-bold">
+                        {player.teamCode}
+                      </span>
+                      <span className="font-pixel text-[8px] text-[#784610] font-bold">
+                        {player.position}
+                      </span>
+                    </div>
+
+                    <div className="my-0.5">
+                      <PixelPlayerSprite
+                        avatar={player.avatar}
+                        number={player.uniformNumber}
+                        size="sm"
+                        withShadow={false}
+                      />
+                    </div>
+
+                    {/* Stacked Full Name (No truncation) */}
+                    <div className="text-center mt-1 leading-tight w-full">
+                      {firstName && (
+                        <div className="font-pixel text-[8px] sm:text-[9px] opacity-80 uppercase">
+                          {firstName}
+                        </div>
+                      )}
+                      <div className="font-pixel text-[9px] sm:text-[11px] font-bold uppercase break-words">
+                        {lastName}
+                      </div>
+                    </div>
+
+                    <span className="mt-1 px-1.5 py-0.5 bg-[#12579b] text-[#fae5b8] font-pixel text-[9px] font-bold rounded-2xs whitespace-nowrap">
+                      {player.score ? `${player.score} PTS` : '0 PTS'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Minimal Search Bar for Parents Typing Specific Names */}
+        <div className="mb-2 shrink-0">
           <div className="relative flex items-center">
             <Search size={14} className="absolute left-2.5 text-[#784610]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search NFL stars (Mahomes, Allen, Henry, Lamb, SEA)..."
-              className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-[#ebd2a4] border-2 border-[#c99a57] text-[#5c3509] font-retro text-xs rounded-xs placeholder:text-[#8c735d] focus:outline-hidden focus:border-[#12579b] focus:bg-[#fae9c8]"
+              placeholder="Search player, team, or position (e.g. Allen, Henry, Chiefs, QB)..."
+              className="w-full pl-8 pr-7 py-1.5 bg-[#ebd2a4] border-2 border-[#c99a57] text-[#5c3509] font-retro text-xs rounded-xs placeholder:text-[#8c735d] focus:outline-hidden focus:border-[#12579b] focus:bg-[#fae9c8]"
             />
             {searchQuery && (
               <button
@@ -94,24 +244,36 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           </div>
         </div>
 
-        {/* Player List */}
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[220px] max-h-[55vh]">
+        {/* Active Filter Indicator */}
+        {activeMatchObj && (
+          <div className="mb-2 px-2.5 py-1 bg-[#12579b]/10 border border-[#12579b]/30 rounded-xs flex items-center justify-between text-[10px] font-pixel text-[#12579b] shrink-0">
+            <span>SHOWING PLAYERS FOR: {activeMatchObj.awayTeam} vs {activeMatchObj.homeTeam}</span>
+            <button
+              onClick={() => setSelectedGameFilter('ALL')}
+              className="text-[#b91c1c] hover:underline cursor-pointer"
+            >
+              CLEAR GAME FILTER [✕]
+            </button>
+          </div>
+        )}
+
+        {/* PLAYERS VERTICAL LIST (Touch-Friendly Rows) */}
+        <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 min-h-[160px] max-h-[46vh]">
           {filteredPlayers.length === 0 ? (
-            <div className="text-center py-8 text-[#784610] font-retro text-xs">
-              No NFL athletes match "{searchQuery}"
+            <div className="text-center py-8 font-retro text-xs text-[#784610]">
+              No NFL stars match the current filter.
             </div>
           ) : (
             filteredPlayers.map((player) => {
               const isCurrentSlot = player.id === currentSlotPlayerId;
               const isOtherSlot = !isCurrentSlot && selectedPlayerIds.includes(player.id);
-              const formattedName = formatPlayerInitialLastName(player.displayName);
-              const teamPosSubtitle = formatTeamPosSubtitle(player.teamCode, player.position || player.positionGeneric);
+              const { firstName, lastName } = splitPlayerFirstLastName(player.displayName);
 
               return (
                 <div
                   key={player.id}
                   onClick={() => {
-                    onSelectPlayer(player, slotIndex);
+                    onSelectPlayer(player, activeSlot);
                     onClose();
                   }}
                   className={`touch-manipulation p-2 sm:p-2.5 border-2 rounded-xs flex items-center justify-between gap-2 cursor-pointer transition-all active:translate-y-0.5 ${
@@ -120,9 +282,8 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                       : 'bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-[#c99a57]'
                   }`}
                 >
-                  {/* Left Column: Sprite + Name + Team Abbr + Position */}
+                  {/* Left Column: 8-Bit Sprite + Name + Team Abbreviation + Position */}
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                    {/* 8-bit Sprite */}
                     <div className="shrink-0">
                       <PixelPlayerSprite
                         avatar={player.avatar}
@@ -133,25 +294,38 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="leading-tight mr-1">
+                          {firstName && (
+                            <div
+                              className={`font-pixel text-[9px] sm:text-[10px] uppercase opacity-80 ${
+                                isCurrentSlot ? 'text-[#fae5b8]' : 'text-[#784610]'
+                              }`}
+                            >
+                              {firstName}
+                            </div>
+                          )}
+                          <div
+                            className={`font-pixel text-xs sm:text-sm tracking-wide font-bold uppercase ${
+                              isCurrentSlot ? 'text-[#fae5b8]' : 'text-[#5c3509]'
+                            }`}
+                          >
+                            {lastName}
+                          </div>
+                        </div>
+
+                        {/* Team Code Badge */}
                         <span
-                          className={`font-pixel text-xs sm:text-sm tracking-wide truncate ${
-                            isCurrentSlot ? 'text-[#fae5b8]' : 'text-[#5c3509]'
-                          }`}
-                        >
-                          {formattedName}
-                        </span>
-                        {/* 3-Letter Team Abbreviation Badge */}
-                        <span
-                          className={`px-1.5 py-0.5 font-pixel text-[9px] border rounded-xs shrink-0 ${
+                          className={`px-1.5 py-0.5 font-pixel text-[9px] border rounded-xs shrink-0 font-bold ${
                             isCurrentSlot
                               ? 'bg-[#0a2d52] text-[#fae5b8] border-[#38bdf8]/40'
-                              : 'bg-[#fae5b8] text-[#12579b] border-[#c99a57] font-bold'
+                              : 'bg-[#fae5b8] text-[#12579b] border-[#c99a57]'
                           }`}
                         >
                           {player.teamCode}
                         </span>
-                        {/* Real Position Badge */}
+
+                        {/* Position Badge */}
                         <span
                           className={`px-1.5 py-0.5 font-pixel text-[9px] border rounded-xs shrink-0 ${
                             isCurrentSlot
@@ -159,11 +333,12 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                               : 'bg-[#fae9c8] text-[#784610] border-[#d4a86a]'
                           }`}
                         >
-                          {player.position || player.positionGeneric || 'STAR'}
+                          {player.position || 'STAR'}
                         </span>
                       </div>
+
                       <div
-                        className={`font-retro text-[10px] ${
+                        className={`font-retro text-[10px] mt-0.5 ${
                           isCurrentSlot ? 'text-[#93c5fd]' : 'text-[#784610]'
                         }`}
                       >
@@ -172,7 +347,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Right Column: Score Badge + Action (flex-shrink-0 and whitespace-nowrap) */}
+                  {/* Right Column: Whole Number Points Badge + Pick Button */}
                   <div className="flex items-center gap-2 shrink-0">
                     <div
                       className={`px-2 py-1 font-pixel text-[11px] sm:text-xs font-bold border rounded-xs shadow-xs whitespace-nowrap shrink-0 ${
@@ -186,7 +361,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
 
                     <button
                       type="button"
-                      className={`px-2 py-1 font-pixel text-[9px] sm:text-[10px] border rounded-xs whitespace-nowrap shrink-0 cursor-pointer transition-all ${
+                      className={`px-2.5 py-1 font-pixel text-[9px] sm:text-[10px] border rounded-xs whitespace-nowrap shrink-0 cursor-pointer transition-all ${
                         isCurrentSlot
                           ? 'bg-[#166534] text-[#fae5b8] border-[#14532d]'
                           : 'bg-[#fae5b8] hover:bg-white text-[#5c3509] border-[#c99a57]'
@@ -201,10 +376,9 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           )}
         </div>
 
-        {/* Footer helper */}
-        <div className="mt-3 pt-2 border-t border-[#d4a86a] flex items-center justify-between text-[10px] font-retro text-[#784610] shrink-0">
-          <span>{filteredPlayers.length} NFL Stars Available</span>
-          <span>Tap to pick into STAR {slotIndex + 1}</span>
+        {/* Footer Helper */}
+        <div className="mt-2.5 pt-2 border-t border-[#d4a86a] text-center text-[10px] font-retro text-[#784610] shrink-0">
+          Selected player is placed directly into {targetTitle}. Tap any player above to assign!
         </div>
 
       </div>

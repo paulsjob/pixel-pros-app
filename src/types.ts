@@ -28,11 +28,14 @@ export interface Competitor {
   position?: string;
   rating: number;
   stats: {
-    passingYards: number;
-    rushingYards: number;
-    touchdowns: number;
-    primaryMetricLabel: string;
-    primaryMetricValue: number;
+    passingYards?: number;
+    rushingYards?: number;
+    touchdowns?: number;
+    receptions?: number;
+    receivingYards?: number;
+    primaryMetricLabel?: string;
+    primaryMetricValue?: number;
+    [key: string]: any;
   };
   badges: string[];
   score: number;
@@ -79,14 +82,25 @@ export interface UserProfile {
   badges: string[];
   avatar: AvatarConfig;
   selectedPlayerIds: string[];
+  isLocked?: boolean;
+}
+
+export type ActiveSlot = 'star1' | 'star2' | 'star3';
+
+export interface SquadSlots {
+  star1: Competitor | null;
+  star2: Competitor | null;
+  star3: Competitor | null;
 }
 
 export interface UserRoster {
   id?: string;
   room_code: string;
   user_name: string;
+  device_id?: string;
   star_1_id: string;
   star_2_id: string;
   star_3_id: string;
+  is_locked?: boolean;
   updated_at?: string;
 }

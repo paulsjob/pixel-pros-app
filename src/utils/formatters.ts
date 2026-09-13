@@ -2,6 +2,17 @@
  * Utility functions for formatting player names and team badges
  */
 
+export function splitPlayerFirstLastName(fullName: string): { firstName: string; lastName: string } {
+  if (!fullName) return { firstName: '', lastName: '' };
+  const trimmed = fullName.trim();
+  const parts = trimmed.split(/\s+/);
+  if (parts.length <= 1) return { firstName: '', lastName: parts[0] || '' };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
 export function formatPlayerInitialLastName(fullName: string): string {
   if (!fullName) return '';
   const trimmed = fullName.trim();

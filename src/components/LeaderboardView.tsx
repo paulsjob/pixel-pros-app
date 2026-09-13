@@ -4,7 +4,8 @@ import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { PixelHelmetIcon, PixelShieldIcon } from './PixelBadges';
 import { RoomSetupBar } from './RoomSetupBar';
 import { Users, Sparkles } from 'lucide-react';
-import { formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
+import { splitPlayerFirstLastName, formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
+import { getDeviceId } from '../lib/deviceIdentity';
 
 interface LeaderboardViewProps {
   user: UserProfile;
@@ -12,8 +13,8 @@ interface LeaderboardViewProps {
   roomRosters?: UserRoster[];
   roomCode: string;
   userName: string;
-  onRoomCodeChange: (code: string) => void;
-  onUserNameChange: (name: string) => void;
+  onCommitRoomCode: (code: string) => void;
+  onCommitUserName: (name: string) => void;
   onOpenPlayerDetail?: (player: Competitor) => void;
 }
 
@@ -23,8 +24,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   roomRosters = [],
   roomCode,
   userName,
-  onRoomCodeChange,
-  onUserNameChange,
+  onCommitRoomCode,
+  onCommitUserName,
   onOpenPlayerDetail,
 }) => {
   // Two bold retro toggle buttons: [ FAMILY ] (default) and [ TOP SCORES ]
@@ -32,6 +33,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
   const safeNflPlayers = Array.isArray(nflCompetitors) ? nflCompetitors : [];
   const safeRoomRosters = Array.isArray(roomRosters) ? roomRosters : [];
+  const myDeviceId = getDeviceId();
 
   // Top 20 NFL Competitors ordered by score DESC
   const top20Players = safeNflPlayers
@@ -39,76 +41,88 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     .sort((a, b) => (b.score || 0) - (a.score || 0))
     .slice(0, 20);
 
-  // Fallback couch players if room has only the current player
+  // Fallback couch companions ONLY for default 'COUCH' room
   const defaultCouchLineups: UserRoster[] = [
     {
-      room_code: roomCode.toUpperCase(),
+      room_code: 'COUCH',
       user_name: 'DAD',
+      device_id: 'couch_dad_bot',
       star_1_id: safeNflPlayers[1]?.id || 'mahomes',
       star_2_id: safeNflPlayers[4]?.id || 'henry',
       star_3_id: safeNflPlayers[7]?.id || 'brown',
       updated_at: new Date().toISOString(),
     },
     {
-      room_code: roomCode.toUpperCase(),
+      room_code: 'COUCH',
       user_name: 'MOM',
+      device_id: 'couch_mom_bot',
       star_1_id: safeNflPlayers[0]?.id || 'allen',
       star_2_id: safeNflPlayers[3]?.id || 'lamb',
       star_3_id: safeNflPlayers[8]?.id || 'jefferson',
       updated_at: new Date().toISOString(),
     },
     {
-      room_code: roomCode.toUpperCase(),
-      user_name: 'LEO',
+      room_code: 'COUCH',
+      user_name: 'BROTHER',
+      device_id: 'couch_bro_bot',
       star_1_id: safeNflPlayers[2]?.id || 'jackson',
       star_2_id: safeNflPlayers[5]?.id || 'barkley',
-      star_3_id: safeNflPlayers[6]?.id || 'stbrown',
+      star_3_id: safeNflPlayers[9]?.id || 'chase',
       updated_at: new Date().toISOString(),
     },
   ];
 
-  // Current user roster entry
+  // Current user roster entry for this active room and device
   const currentUserRoster: UserRoster = {
     room_code: roomCode.toUpperCase(),
     user_name: userName.trim().toUpperCase() || 'YOU',
+    device_id: myDeviceId,
     star_1_id: user.selectedPlayerIds?.[0] || '',
     star_2_id: user.selectedPlayerIds?.[1] || '',
     star_3_id: user.selectedPlayerIds?.[2] || '',
+    is_locked: (user as any).isLocked || false,
     updated_at: new Date().toISOString(),
   };
 
-  // Merge live user_rosters from Supabase / localStorage with current user and couch companions
+  // Map to deduplicate by device_id or user_name, strictly scoped to this room_code
   const rosterMap = new Map<string, UserRoster>();
   
-  // First add default companions if room is standard COUCH
+  // 1. If standard COUCH room, seed companions
   if (roomCode.toUpperCase() === 'COUCH') {
-    defaultCouchLineups.forEach((r) => rosterMap.set(r.user_name.toUpperCase(), r));
+    defaultCouchLineups.forEach((r) => {
+      rosterMap.set(`companion_${r.user_name.toUpperCase()}`, r);
+    });
   }
 
-  // Then add synced room rosters from Supabase
+  // 2. Add synced room rosters strictly belonging to this room_code
   safeRoomRosters.forEach((r) => {
-    rosterMap.set(r.user_name.toUpperCase(), r);
+    if ((r.room_code || '').toUpperCase() === roomCode.toUpperCase()) {
+      const key = r.device_id ? `dev_${r.device_id}` : `name_${r.user_name.toUpperCase()}`;
+      rosterMap.set(key, r);
+    }
   });
 
-  // Always enforce current user's latest picks
-  rosterMap.set(currentUserRoster.user_name.toUpperCase(), currentUserRoster);
+  // 3. Always enforce current user's entry using their device_id
+  rosterMap.set(`dev_${myDeviceId}`, currentUserRoster);
 
   const familyListWithDynamicTotals = Array.from(rosterMap.values()).map((entry) => {
-    const isUser = entry.user_name.toUpperCase() === currentUserRoster.user_name.toUpperCase() ||
-      entry.user_name.toUpperCase() === 'YOU' ||
-      entry.user_name.toUpperCase() === userName.toUpperCase();
+    const isUser =
+      (entry.device_id && entry.device_id === myDeviceId) ||
+      entry.user_name.toUpperCase() === currentUserRoster.user_name.toUpperCase() ||
+      entry.user_name.toUpperCase() === 'YOU';
 
     const star1 = safeNflPlayers.find((p) => p.id === entry.star_1_id);
     const star2 = safeNflPlayers.find((p) => p.id === entry.star_2_id);
     const star3 = safeNflPlayers.find((p) => p.id === entry.star_3_id);
     const starPlayers = [star1, star2, star3].filter(Boolean) as Competitor[];
 
-    // Calculate each family member's total score dynamically: Total = (Star 1 pts) + (Star 2 pts) + (Star 3 pts)
+    // Calculate dynamic total: (Star 1 pts) + (Star 2 pts) + (Star 3 pts)
     const sumPoints = starPlayers.reduce((sum, p) => sum + (p.score || 0), 0);
 
     return {
-      userName: entry.user_name,
+      userName: isUser ? (userName.trim().toUpperCase() || 'YOU') : entry.user_name,
       isYou: isUser,
+      isLocked: Boolean(entry.is_locked),
       starPlayers,
       totalScore: sumPoints,
       stars: [star1, star2, star3],
@@ -136,12 +150,12 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
       <RoomSetupBar
         userName={userName}
         roomCode={roomCode}
-        onUserNameChange={onUserNameChange}
-        onRoomCodeChange={onRoomCodeChange}
+        onCommitUserName={onCommitUserName}
+        onCommitRoomCode={onCommitRoomCode}
         memberCount={familyListWithDynamicTotals.length}
       />
 
-      {/* Top Header */}
+      {/* Top Header - No repetitive text */}
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 sm:gap-3 mb-1">
           <PixelShieldIcon size={30} color="#155e9e" />
@@ -149,9 +163,6 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             LEADERBOARD
           </h1>
         </div>
-        <p className="font-retro text-xs sm:text-sm text-[#93c5fd]">
-          ROOM &quot;{roomCode.toUpperCase()}&quot; &amp; NFL STANDINGS
-        </p>
       </div>
 
       {/* 2-Tier Retro Toggle Buttons: [ FAMILY ] and [ TOP SCORES ] */}
@@ -188,13 +199,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         <div className="flex items-center justify-between pb-2.5 sm:pb-3 mb-3 border-b-2 border-[#d4a86a]">
           <div>
             <h2 className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase">
-              {activeTier === 'family' ? `ROOM "${roomCode.toUpperCase()}" 3-STAR STANDINGS` : 'TOP NFL ATHLETES (LIMIT 20)'}
+              {activeTier === 'family' ? `ROOM "${roomCode.toUpperCase()}" 3-STAR STANDINGS` : 'TOP NFL ATHLETES'}
             </h2>
-            <span className="font-retro text-[10px] sm:text-[11px] text-[#784610]">
-              {activeTier === 'family'
-                ? 'Dynamic sum: (Star 1 pts) + (Star 2 pts) + (Star 3 pts)'
-                : 'Top 20 active NFL athletes ordered by score DESC'}
-            </span>
           </div>
 
           <span className="font-pixel text-[10px] sm:text-[11px] text-[#12579b] bg-[#fae9c8] px-2 py-0.5 border border-[#d4a86a] rounded-xs shrink-0 whitespace-nowrap">
@@ -253,6 +259,12 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                         {isUser && (
                           <span className="font-pixel text-[9px] px-1.5 py-0.2 bg-[#fde047] text-[#78350f] border border-[#b45309] rounded-2xs shrink-0 font-bold">
                             YOU
+                          </span>
+                        )}
+                        {entry.isLocked && (
+                          <span className="font-pixel text-[8px] sm:text-[9px] px-1.5 py-0.2 bg-[#166534] text-[#bbf7d0] border border-[#14532d] rounded-2xs shrink-0 flex items-center gap-0.5 font-bold">
+                            <span>🔒</span>
+                            <span>LOCKED</span>
                           </span>
                         )}
                       </div>
@@ -317,7 +329,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             /* TIER 2: TOP SCORES (Top 20 Real NFL Athletes from competitors table) */
             top20Players.map((player, index) => {
               const displayRank = index + 1;
-              const formattedName = formatPlayerInitialLastName(player.displayName);
+              const { firstName, lastName } = splitPlayerFirstLastName(player.displayName);
               const teamPosSubtitle = formatTeamPosSubtitle(player.teamCode, player.position || player.positionGeneric);
 
               return (
@@ -326,7 +338,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                   onClick={() => onOpenPlayerDetail && onOpenPlayerDetail(player)}
                   className="w-full flex items-center justify-between p-2 sm:p-2.5 bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-2 border-[#c99a57] rounded-xs cursor-pointer transition-all active:translate-y-0.5 box-border"
                 >
-                  {/* Column 1: Rank Badge + Sprite + P. Mahomes + [TEAM] · [POS] */}
+                  {/* Column 1: Rank Badge + Sprite + Stacked Name + [TEAM] · [POS] */}
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 pr-2">
                     {/* Rank Badge */}
                     <span
@@ -337,7 +349,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                       #{displayRank}
                     </span>
 
-                    {/* Mini Player Sprite */}
+                    {/* Sprite */}
                     <div className="shrink-0">
                       <PixelPlayerSprite
                         avatar={player.avatar}
@@ -347,27 +359,27 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                       />
                     </div>
 
-                    {/* Player Name formatted as "First Initial. Last Name" (e.g. "P. Mahomes") */}
+                    {/* Stacked Name + (TEAM · POS) */}
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-pixel text-xs sm:text-sm tracking-wide truncate">
-                          {formattedName}
-                        </span>
-                        {/* 3-Letter Team Abbreviation Badge */}
-                        <span className="px-1.5 py-0.5 bg-[#fae5b8] text-[#12579b] border border-[#c99a57] font-pixel text-[9px] font-bold rounded-2xs shrink-0">
-                          {player.teamCode}
-                        </span>
+                      <div className="leading-tight">
+                        {firstName && (
+                          <div className="font-pixel text-[9px] sm:text-[10px] text-[#784610] uppercase opacity-85">
+                            {firstName}
+                          </div>
+                        )}
+                        <div className="font-pixel text-xs sm:text-sm text-[#451a03] font-bold uppercase tracking-wide break-words">
+                          {lastName}
+                        </div>
                       </div>
-                      {/* Subtitle: "[TEAM] · [POS]" */}
-                      <div className="font-retro text-[10px] text-[#784610] mt-0.5">
+                      <div className="font-retro text-[10px] sm:text-[11px] text-[#784610] mt-0.5">
                         {teamPosSubtitle} • #{player.uniformNumber}
                       </div>
                     </div>
                   </div>
 
-                  {/* Column 2: Total Points Right-Aligned (shrink-0 and whitespace-nowrap) */}
+                  {/* Column 2: Total Points Right-Aligned */}
                   <div className="shrink-0 whitespace-nowrap ml-2">
-                    <div className="px-2.5 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-xs sm:text-sm font-bold border border-[#0a2d52] rounded-xs shadow-xs text-right whitespace-nowrap">
+                    <div className="px-2.5 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-xs sm:text-sm font-bold border border-[#0a2d52] shadow-xs rounded-xs text-right whitespace-nowrap">
                       {player.score ? `${player.score.toLocaleString()} PTS` : '0 PTS'}
                     </div>
                   </div>
@@ -377,16 +389,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="mt-3 pt-2.5 border-t border-[#d4a86a] text-center text-[10px] font-retro text-[#784610]">
-          {activeTier === 'family' ? (
-            <span>⚡ Room scores update in real-time as your 3 stars make plays on the field</span>
-          ) : (
-            <span>⚡ Real NFL players hydrated from Supabase competitors table</span>
-          )}
-        </div>
-
       </div>
+
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { Competitor, Match, UserRoster } from '../types';
-import { INITIAL_COMPETITORS } from '../data/mockData';
+import { INITIAL_COMPETITORS, LIVE_MATCHES } from '../data/mockData';
+import { getDeviceId } from './deviceIdentity';
 
 // Fallback to demo Supabase project if env variables are not yet configured in local environment
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : {};
@@ -36,47 +37,86 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
       .from('competitors')
       .select('*')
       .order('score', { ascending: false })
-      .limit(20);
+      .limit(350);
 
     if (error || !data || data.length === 0) {
       return INITIAL_COMPETITORS;
     }
 
-    return data.map((row: any): Competitor => {
-      const fallback =
-        INITIAL_COMPETITORS.find(
-          (c) =>
-            c.id === (row.id || row.external_provider_id) ||
-            c.shortName.toLowerCase() === row.short_name?.toLowerCase()
-        ) || INITIAL_COMPETITORS[0];
+    // Merge Supabase scores into our athlete pool so all 250+ players are preserved
+    const fetchedMap = new Map<string, any>();
+    data.forEach((row: any) => {
+      const key = String(row.id || row.external_provider_id || row.short_name?.toLowerCase()).toLowerCase();
+      fetchedMap.set(key, row);
+      if (row.short_name) {
+        fetchedMap.set(row.short_name.toLowerCase(), row);
+      }
+    });
 
-      // Strictly real points: if 0 or null, defaults to 0
-      const rawScore = row.score ?? row.fantasy_points ?? 0;
+    const result = INITIAL_COMPETITORS.map((fallback) => {
+      const row = fetchedMap.get(fallback.id.toLowerCase()) || fetchedMap.get(fallback.shortName.toLowerCase());
+      if (!row) return fallback;
+
+      const rawScore = row.score ?? row.fantasy_points ?? fallback.score;
       const wholeScore = Math.max(0, Math.round(Number(rawScore) || 0));
 
       return {
-        id: String(row.id || row.external_provider_id || row.short_name?.toLowerCase()),
-        sportId: 'nfl',
-        displayName: row.display_name || row.short_name || 'NFL Pro',
-        shortName: row.short_name || row.display_name?.split(' ').pop()?.toUpperCase() || 'PRO',
-        uniformNumber: Number(row.uniform_number || row.jersey_number || fallback.uniformNumber || 10),
-        teamName: row.team_name || fallback.teamName || 'NFL',
-        teamCode: (row.team_code || fallback.teamCode || 'NFL').toUpperCase(),
-        positionGeneric: row.position_generic || fallback.positionGeneric || 'STAR',
-        position: row.position || row.position_generic || fallback.position || 'WR',
-        rating: Number(row.rating || fallback.rating || 90),
+        ...fallback,
+        displayName: row.display_name || fallback.displayName,
+        shortName: row.short_name || fallback.shortName,
+        uniformNumber: Number(row.uniform_number || row.jersey_number || fallback.uniformNumber),
+        teamName: row.team_name || fallback.teamName,
+        teamCode: (row.team_code || fallback.teamCode).toUpperCase(),
+        position: row.position || fallback.position,
         score: wholeScore,
-        stats: row.stats || fallback.stats || {
-          passingYards: Number(row.passing_yards || 0),
-          rushingYards: Number(row.rushing_yards || 0),
-          touchdowns: Number(row.touchdowns || 0),
+        stats: row.stats || {
+          passingYards: Number(row.passing_yards || fallback.stats.passingYards),
+          rushingYards: Number(row.rushing_yards || fallback.stats.rushingYards),
+          touchdowns: Number(row.touchdowns || fallback.stats.touchdowns),
           primaryMetricLabel: 'Touchdowns',
-          primaryMetricValue: Number(row.touchdowns || 0),
+          primaryMetricValue: Number(row.touchdowns || fallback.stats.touchdowns),
         },
-        badges: row.badges || fallback.badges || ['mvp_trophy', 'gold_star'],
-        avatar: row.avatar_config || fallback.avatar,
       };
     });
+
+    // Also include any new players returned from Supabase that weren't in INITIAL_COMPETITORS
+    data.forEach((row: any) => {
+      const id = String(row.id || row.external_provider_id || row.short_name?.toLowerCase());
+      const alreadyExists = result.some(p => p.id.toLowerCase() === id.toLowerCase() || p.shortName.toLowerCase() === row.short_name?.toLowerCase());
+      if (!alreadyExists) {
+        const rawScore = row.score ?? row.fantasy_points ?? 0;
+        result.push({
+          id,
+          sportId: 'nfl',
+          displayName: row.display_name || row.short_name || 'NFL Pro',
+          shortName: (row.short_name || 'PRO').toUpperCase(),
+          uniformNumber: Number(row.uniform_number || 10),
+          teamName: row.team_name || 'NFL',
+          teamCode: (row.team_code || 'NFL').toUpperCase(),
+          positionGeneric: row.position_generic || 'OFFENSE',
+          position: row.position || 'WR',
+          rating: Number(row.rating || 90),
+          score: Math.max(0, Math.round(Number(rawScore) || 0)),
+          stats: {
+            passingYards: Number(row.passing_yards || 0),
+            rushingYards: Number(row.rushing_yards || 0),
+            touchdowns: Number(row.touchdowns || 0),
+            primaryMetricLabel: 'Touchdowns',
+            primaryMetricValue: Number(row.touchdowns || 0),
+          },
+          badges: ['gold_star'],
+          avatar: {
+            helmetColor: '#12579b',
+            jerseyColor: '#12579b',
+            stripeColor: '#ffffff',
+            skinTone: '#d98c55',
+            number: Number(row.uniform_number || 10),
+          },
+        });
+      }
+    });
+
+    return result.sort((a, b) => b.score - a.score);
   } catch (err) {
     console.warn('⚡ Live Supabase fetch encountered error, using genuine local NFL roster:', err);
     return INITIAL_COMPETITORS;
@@ -85,8 +125,7 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
 
 /**
  * Fetches real NFL games directly from the Supabase matches table (sport = 'nfl').
- * If a game status is 'scheduled' or 'upcoming', displays the real kickoff time or status
- * (e.g. '1:00 PM EDT') instead of fake scores.
+ * Falls back cleanly to LIVE_MATCHES (the active week match slate).
  */
 export async function fetchLiveNFLMatches(): Promise<Match[]> {
   try {
@@ -97,7 +136,7 @@ export async function fetchLiveNFLMatches(): Promise<Match[]> {
       .order('scheduled_at', { ascending: true });
 
     if (error || !data || data.length === 0) {
-      return [];
+      return LIVE_MATCHES;
     }
 
     return data.map((row: any): Match => {
@@ -135,13 +174,13 @@ export async function fetchLiveNFLMatches(): Promise<Match[]> {
     });
   } catch (err) {
     console.warn('⚡ Live Supabase matches fetch encountered error:', err);
-    return [];
+    return LIVE_MATCHES;
   }
 }
 
 /**
  * Upsert picks directly to Supabase table `user_rosters`:
- * { room_code: roomCode.toUpperCase(), user_name: userName, star_1_id, star_2_id, star_3_id, updated_at: new Date().toISOString() }
+ * { room_code: roomCode.toUpperCase(), device_id: deviceId, user_name: userName, star_1_id, star_2_id, star_3_id, is_locked, updated_at: new Date().toISOString() }
  * Also synchronizes with local multi-device storage cache so multi-tab or local sessions stay in sync.
  */
 export async function upsertUserRoster(
@@ -149,26 +188,31 @@ export async function upsertUserRoster(
   userName: string,
   star1Id: string,
   star2Id: string,
-  star3Id: string
+  star3Id: string,
+  isLocked?: boolean
 ): Promise<{ success: boolean; data?: UserRoster }> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   const cleanName = (userName || 'YOU').trim();
+  const deviceId = getDeviceId();
+
   const record: UserRoster = {
     room_code: cleanRoom,
     user_name: cleanName,
+    device_id: deviceId,
     star_1_id: star1Id || '',
     star_2_id: star2Id || '',
     star_3_id: star3Id || '',
+    is_locked: isLocked ?? false,
     updated_at: new Date().toISOString(),
   };
 
-  // Sync to local room cache
+  // Sync to local room cache (keyed by room & device_id or user_name)
   try {
     const localKey = `pixel_pros_rosters_${cleanRoom}`;
     const raw = localStorage.getItem(localKey);
     let rosters: UserRoster[] = raw ? JSON.parse(raw) : [];
     const idx = rosters.findIndex(
-      (r) => r.user_name.toLowerCase() === cleanName.toLowerCase()
+      (r) => (r.device_id && r.device_id === deviceId) || r.user_name.toLowerCase() === cleanName.toLowerCase()
     );
     if (idx >= 0) {
       rosters[idx] = { ...rosters[idx], ...record };
@@ -176,27 +220,44 @@ export async function upsertUserRoster(
       rosters.push(record);
     }
     localStorage.setItem(localKey, JSON.stringify(rosters));
+    // Save lock state explicitly in localStorage for this room and device/user
+    localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${deviceId}`, isLocked ? 'true' : 'false');
+    localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, isLocked ? 'true' : 'false');
+    // Save user's roster for this specific room to enable instant multi-room switching
+    localStorage.setItem(`pixel_pros_roster_${cleanRoom}`, JSON.stringify([record.star_1_id, record.star_2_id, record.star_3_id]));
     // Dispatch local notification event
     window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: record }));
   } catch {
     // ignore
   }
 
-  // Upsert to Supabase table user_rosters
+  // Upsert to Supabase table user_rosters with device_id
   try {
-    const { error } = await supabase
+    const payload: any = {
+      room_code: cleanRoom,
+      device_id: deviceId,
+      user_name: cleanName,
+      star_1_id: star1Id || '',
+      star_2_id: star2Id || '',
+      star_3_id: star3Id || '',
+      updated_at: record.updated_at,
+    };
+    if (typeof isLocked === 'boolean') {
+      payload.is_locked = isLocked;
+    }
+
+    // Try upserting with (room_code, device_id)
+    let { error } = await supabase
       .from('user_rosters')
-      .upsert(
-        {
-          room_code: cleanRoom,
-          user_name: cleanName,
-          star_1_id: star1Id || '',
-          star_2_id: star2Id || '',
-          star_3_id: star3Id || '',
-          updated_at: record.updated_at,
-        },
-        { onConflict: 'room_code,user_name' }
-      );
+      .upsert(payload, { onConflict: 'room_code, device_id' });
+
+    // Fallback if DB table constraint is room_code,user_name
+    if (error && error.message && error.message.includes('conflict')) {
+      const fallback = await supabase
+        .from('user_rosters')
+        .upsert(payload, { onConflict: 'room_code,user_name' });
+      error = fallback.error;
+    }
 
     if (error) {
       console.warn('Supabase user_rosters upsert notice:', error.message);
@@ -237,19 +298,26 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
       return localRosters;
     }
 
-    // Merge Supabase records with local records
+    // Merge Supabase records with local records: deduplicate by device_id or user_name
     const map = new Map<string, UserRoster>();
-    localRosters.forEach((r) => map.set(r.user_name.toLowerCase(), r));
+    localRosters.forEach((r) => {
+      const key = r.device_id ? `dev_${r.device_id}` : `name_${r.user_name.toLowerCase()}`;
+      map.set(key, r);
+    });
     data.forEach((r: any) => {
-      map.set(r.user_name.toLowerCase(), {
+      const entry: UserRoster = {
         id: r.id,
         room_code: r.room_code,
         user_name: r.user_name,
+        device_id: r.device_id,
         star_1_id: r.star_1_id,
         star_2_id: r.star_2_id,
         star_3_id: r.star_3_id,
+        is_locked: Boolean(r.is_locked),
         updated_at: r.updated_at,
-      });
+      };
+      const key = entry.device_id ? `dev_${entry.device_id}` : `name_${entry.user_name.toLowerCase()}`;
+      map.set(key, entry);
     });
 
     return Array.from(map.values());

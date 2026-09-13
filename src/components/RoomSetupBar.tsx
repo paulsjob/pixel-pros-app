@@ -1,21 +1,51 @@
-import React from 'react';
-import { Users, Radio } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users } from 'lucide-react';
 
 interface RoomSetupBarProps {
   userName: string;
   roomCode: string;
-  onUserNameChange: (name: string) => void;
-  onRoomCodeChange: (code: string) => void;
+  onCommitUserName: (name: string) => void;
+  onCommitRoomCode: (code: string) => void;
   memberCount?: number;
 }
 
 export const RoomSetupBar: React.FC<RoomSetupBarProps> = ({
   userName,
   roomCode,
-  onUserNameChange,
-  onRoomCodeChange,
+  onCommitUserName,
+  onCommitRoomCode,
   memberCount,
 }) => {
+  // Local state prevents keystroke Supabase network spam
+  const [localName, setLocalName] = useState(userName);
+  const [localRoom, setLocalRoom] = useState(roomCode);
+
+  useEffect(() => {
+    setLocalName(userName);
+  }, [userName]);
+
+  useEffect(() => {
+    setLocalRoom(roomCode);
+  }, [roomCode]);
+
+  const handleNameBlurOrEnter = () => {
+    const trimmed = localName.trim();
+    if (trimmed && trimmed !== userName) {
+      onCommitUserName(trimmed);
+    } else if (!trimmed) {
+      setLocalName(userName); // revert if empty
+    }
+  };
+
+  const handleRoomBlurOrEnter = () => {
+    const clean = localRoom.trim().toUpperCase();
+    if (clean && clean !== roomCode) {
+      onCommitRoomCode(clean);
+    } else if (!clean) {
+      setLocalRoom(roomCode); // revert if empty
+    }
+  };
+
   return (
     <div className="w-full bg-[#080d1a] border-3 border-[#1a264a] shadow-[0_4px_0_0_#050811] p-2 sm:p-2.5 mb-3 sm:mb-4 rounded-xs box-border">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-3">
@@ -27,15 +57,33 @@ export const RoomSetupBar: React.FC<RoomSetupBarProps> = ({
             <label htmlFor="user-name-input" className="font-pixel text-[10px] sm:text-xs text-[#38bdf8] whitespace-nowrap">
               NAME:
             </label>
-            <input
-              id="user-name-input"
-              type="text"
-              value={userName}
-              onChange={(e) => onUserNameChange(e.target.value)}
-              placeholder="e.g. Dad"
-              maxLength={14}
-              className="bg-[#1a2238] border-2 border-[#273552] text-[#fae5b8] font-pixel text-[11px] sm:text-xs px-2 py-1 rounded-2xs focus:border-[#38bdf8] focus:outline-none w-full sm:w-32 uppercase"
-            />
+            <div className="flex items-center gap-1 w-full sm:w-auto">
+              <input
+                id="user-name-input"
+                type="text"
+                value={localName}
+                onChange={(e) => setLocalName(e.target.value)}
+                onBlur={handleNameBlurOrEnter}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="e.g. Dad"
+                maxLength={14}
+                className="bg-[#1a2238] border-2 border-[#273552] text-[#fae5b8] font-pixel text-[11px] sm:text-xs px-2 py-1 rounded-2xs focus:border-[#38bdf8] focus:outline-none w-full sm:w-28 uppercase"
+              />
+              {localName.trim() && localName.trim() !== userName && (
+                <button
+                  type="button"
+                  onClick={handleNameBlurOrEnter}
+                  className="touch-manipulation px-2 py-1 bg-[#16a34a] hover:bg-[#22c55e] text-white border border-[#14532d] font-pixel text-[10px] rounded-2xs cursor-pointer shadow-xs active:translate-y-0.5 shrink-0"
+                  title="Save Name"
+                >
+                  SET
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ROOM INPUT */}
@@ -43,15 +91,33 @@ export const RoomSetupBar: React.FC<RoomSetupBarProps> = ({
             <label htmlFor="room-code-input" className="font-pixel text-[10px] sm:text-xs text-[#f59e0b] whitespace-nowrap">
               ROOM:
             </label>
-            <input
-              id="room-code-input"
-              type="text"
-              value={roomCode}
-              onChange={(e) => onRoomCodeChange(e.target.value.toUpperCase())}
-              placeholder="COUCH"
-              maxLength={10}
-              className="bg-[#1a2238] border-2 border-[#273552] text-[#fae5b8] font-pixel text-[11px] sm:text-xs px-2 py-1 rounded-2xs focus:border-[#f59e0b] focus:outline-none w-full sm:w-28 uppercase"
-            />
+            <div className="flex items-center gap-1 w-full sm:w-auto">
+              <input
+                id="room-code-input"
+                type="text"
+                value={localRoom}
+                onChange={(e) => setLocalRoom(e.target.value.toUpperCase())}
+                onBlur={handleRoomBlurOrEnter}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="COUCH"
+                maxLength={12}
+                className="bg-[#1a2238] border-2 border-[#273552] text-[#fae5b8] font-pixel text-[11px] sm:text-xs px-2 py-1 rounded-2xs focus:border-[#f59e0b] focus:outline-none w-full sm:w-28 uppercase"
+              />
+              {localRoom.trim() && localRoom.trim().toUpperCase() !== roomCode && (
+                <button
+                  type="button"
+                  onClick={handleRoomBlurOrEnter}
+                  className="touch-manipulation px-2 py-1 bg-[#f59e0b] hover:bg-[#fbbf24] text-[#451a03] border border-[#b45309] font-pixel text-[10px] rounded-2xs cursor-pointer shadow-xs active:translate-y-0.5 shrink-0 font-bold"
+                  title="Join Room"
+                >
+                  JOIN
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
