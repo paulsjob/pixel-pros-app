@@ -6,6 +6,23 @@ import { RoomSetupBar } from './RoomSetupBar';
 import { Users, Sparkles } from 'lucide-react';
 import { splitPlayerFirstLastName, formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
 import { getDeviceId } from '../lib/deviceIdentity';
+import { isGhostUser } from '../lib/supabaseClient';
+
+function formatPickedByName(rawName: string): string {
+  const trimmed = (rawName || '').trim();
+  if (trimmed.toUpperCase() === 'MOM') return 'Mom';
+  if (trimmed.toUpperCase() === 'DAD') return 'Dad';
+  if (trimmed.toUpperCase() === 'BROTHER') return 'Brother';
+  if (trimmed.toUpperCase() === 'SISTER') return 'Sister';
+  if (trimmed.toUpperCase() === 'YOU') return 'You';
+  if (trimmed === trimmed.toUpperCase()) {
+    return trimmed
+      .split(' ')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+  return trimmed;
+}
 
 interface LeaderboardViewProps {
   user: UserProfile;
@@ -94,8 +111,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     });
   }
 
-  // 2. Add synced room rosters strictly belonging to this room_code
+  // 2. Add synced room rosters strictly belonging to this room_code (ignoring ghost users)
   safeRoomRosters.forEach((r) => {
+    if (isGhostUser(r.user_name)) return;
     if ((r.room_code || '').toUpperCase() === roomCode.toUpperCase()) {
       const key = r.device_id ? `dev_${r.device_id}` : `name_${r.user_name.toUpperCase()}`;
       rosterMap.set(key, r);
@@ -105,7 +123,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   // 3. Always enforce current user's entry using their device_id
   rosterMap.set(`dev_${myDeviceId}`, currentUserRoster);
 
-  const familyListWithDynamicTotals = Array.from(rosterMap.values()).map((entry) => {
+  const familyListWithDynamicTotals = Array.from(rosterMap.values())
+    .filter((entry) => !isGhostUser(entry.user_name))
+    .map((entry) => {
     const isUser =
       (entry.device_id && entry.device_id === myDeviceId) ||
       entry.user_name.toUpperCase() === currentUserRoster.user_name.toUpperCase() ||
@@ -332,6 +352,21 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
               const { firstName, lastName } = splitPlayerFirstLastName(player.displayName);
               const teamPosSubtitle = formatTeamPosSubtitle(player.teamCode, player.position || player.positionGeneric);
 
+              // Find all members in the current room who picked this athlete
+              const pickedByUsers: string[] = [];
+              familyListWithDynamicTotals.forEach((fam) => {
+                const hasPlayer = fam.stars.some(
+                  (s) =>
+                    s &&
+                    (s.id.toLowerCase() === player.id.toLowerCase() ||
+                      s.shortName.toLowerCase() === player.shortName.toLowerCase())
+                );
+                if (hasPlayer) {
+                  pickedByUsers.push(formatPickedByName(fam.userName));
+                }
+              });
+              const pickedByLabel = pickedByUsers.join(' & ');
+
               return (
                 <div
                   key={player.id || index}
@@ -359,7 +394,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                       />
                     </div>
 
-                    {/* Stacked Name + (TEAM · POS) */}
+                    {/* Stacked Name + (TEAM · POS) + Picked By Arcade Tag */}
                     <div className="min-w-0 flex-1">
                       <div className="leading-tight">
                         {firstName && (
@@ -374,6 +409,15 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                       <div className="font-retro text-[10px] sm:text-[11px] text-[#784610] mt-0.5">
                         {teamPosSubtitle} • #{player.uniformNumber}
                       </div>
+
+                      {/* Arcade Tag: 🏷️ Picked by [User Name] */}
+                      {pickedByUsers.length > 0 && (
+                        <div className="mt-1 flex items-center">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#fef3c7] text-[#92400e] border border-[#f59e0b] font-pixel text-[8px] sm:text-[9px] rounded-2xs shadow-2xs font-bold whitespace-nowrap">
+                            🏷️ Picked by {pickedByLabel}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 

@@ -28,6 +28,10 @@ export interface Competitor {
   position?: string;
   rating: number;
   stats: {
+    pass_yds?: number;
+    rush_yds?: number;
+    rec_yds?: number;
+    tds?: number;
     passingYards?: number;
     rushingYards?: number;
     touchdowns?: number;

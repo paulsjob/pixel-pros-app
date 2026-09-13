@@ -315,14 +315,34 @@ export default function App() {
       (competitorPayload) => {
         const updated = competitorPayload?.new as any;
         if (updated && (updated.id || updated.short_name)) {
+          const statsObj = typeof updated.stats === 'object' && updated.stats ? updated.stats : {};
+          const formatStats = (existingStats?: Record<string, any>) => {
+            const passYds = Number(statsObj.pass_yds ?? updated.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? existingStats?.pass_yds ?? existingStats?.passingYards ?? 0);
+            const rushYds = Number(statsObj.rush_yds ?? updated.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? existingStats?.rush_yds ?? existingStats?.rushingYards ?? 0);
+            const recYds = Number(statsObj.rec_yds ?? updated.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? existingStats?.rec_yds ?? existingStats?.receivingYards ?? 0);
+            const tds = Number(statsObj.tds ?? updated.tds ?? statsObj.touchdowns ?? existingStats?.tds ?? existingStats?.touchdowns ?? 0);
+            return {
+              ...existingStats,
+              ...statsObj,
+              pass_yds: passYds,
+              rush_yds: rushYds,
+              rec_yds: recYds,
+              tds: tds,
+              passingYards: passYds,
+              rushingYards: rushYds,
+              receivingYards: recYds,
+              touchdowns: tds,
+            };
+          };
+
           setRoster((prev) =>
             (prev || []).map((p) => {
-              if (p.id === updated.id || p.shortName === updated.short_name) {
-                const newScore = updated.score ?? p.score;
+              if (p.id === updated.id || p.shortName.toLowerCase() === (updated.short_name || '').toLowerCase()) {
+                const newScore = Math.round(Number(updated.score ?? p.score) || 0);
                 return {
                   ...p,
                   score: newScore,
-                  stats: updated.stats ? { ...p.stats, ...updated.stats } : p.stats,
+                  stats: formatStats(p.stats),
                 };
               }
               return p;
@@ -330,11 +350,12 @@ export default function App() {
           );
           setSquadSlots((prev) => {
             const updateItem = (p: Competitor | null) => {
-              if (p && (p.id === updated.id || p.shortName === updated.short_name)) {
+              if (p && (p.id === updated.id || p.shortName.toLowerCase() === (updated.short_name || '').toLowerCase())) {
+                const newScore = Math.round(Number(updated.score ?? p.score) || 0);
                 return {
                   ...p,
-                  score: updated.score ?? p.score,
-                  stats: updated.stats ? { ...p.stats, ...updated.stats } : p.stats,
+                  score: newScore,
+                  stats: formatStats(p.stats),
                 };
               }
               return p;
@@ -344,6 +365,18 @@ export default function App() {
               star2: updateItem(prev.star2),
               star3: updateItem(prev.star3),
             };
+          });
+          setDetailedPlayer((prev) => {
+            if (!prev) return prev;
+            if (prev.id === updated.id || prev.shortName.toLowerCase() === (updated.short_name || '').toLowerCase()) {
+              const newScore = Math.round(Number(updated.score ?? prev.score) || 0);
+              return {
+                ...prev,
+                score: newScore,
+                stats: formatStats(prev.stats),
+              };
+            }
+            return prev;
           });
           showToast(`⚡ REALTIME: ${updated.short_name || 'Player'} updated to ${updated.score ?? 0} PTS!`);
         }
@@ -513,12 +546,14 @@ export default function App() {
                 userName={userName}
                 roomCode={roomCode}
                 isLocked={isLocked}
+                matches={matches}
                 onCommitUserName={handleCommitUserName}
                 onCommitRoomCode={handleCommitRoomCode}
                 onSelectSlot={(slotKey) => setActiveSlot(slotKey)}
                 onClearSlot={handleClearSlot}
                 onToggleLock={handleToggleLock}
                 onLockedSlotAttempt={() => showToast('🔒 Lineup is LOCKED! Tap UNLOCK PICKS to make changes.')}
+                onInspectPlayer={(player) => setDetailedPlayer(player)}
               />
             )}
 
@@ -625,6 +660,7 @@ export default function App() {
             currentSlotPlayerId={squadSlots[activeSlot]?.id || null}
             selectedPlayerIds={selectedPlayerIdsArray}
             matches={matches}
+            onInspectPlayer={(player) => setDetailedPlayer(player)}
             onSelectPlayer={(player, targetSlot) => {
               handleAssignSlot(player, targetSlot);
               setActiveSlot(null);
@@ -632,25 +668,49 @@ export default function App() {
           />
         )}
 
-        {detailedPlayer && (
-          <PlayerCardModal
-            player={detailedPlayer}
-            onClose={() => setDetailedPlayer(null)}
-            onSelectForTeam={(player) => {
-              // Find first empty slot or star1
-              const emptySlot: ActiveSlot = !squadSlots.star1
-                ? 'star1'
-                : !squadSlots.star2
-                ? 'star2'
-                : !squadSlots.star3
-                ? 'star3'
-                : 'star1';
-              handleAssignSlot(player, emptySlot);
-              setDetailedPlayer(null);
-            }}
-            isSelectedForTeam={selectedPlayerIdsArray.includes(detailedPlayer.id)}
-          />
-        )}
+        {detailedPlayer && (() => {
+          const livePlayer =
+            roster.find(
+              (p) =>
+                p.id === detailedPlayer.id ||
+                p.shortName.toLowerCase() === detailedPlayer.shortName.toLowerCase()
+            ) || detailedPlayer;
+
+          const occupiedSlot: ActiveSlot | null =
+            squadSlots.star1?.id === livePlayer.id ? 'star1' :
+            squadSlots.star2?.id === livePlayer.id ? 'star2' :
+            squadSlots.star3?.id === livePlayer.id ? 'star3' : null;
+
+          return (
+            <PlayerCardModal
+              player={livePlayer}
+              onClose={() => setDetailedPlayer(null)}
+              isSelectedForTeam={Boolean(occupiedSlot) || selectedPlayerIdsArray.includes(livePlayer.id)}
+              onSelectForTeam={(player) => {
+                // Find first empty slot or star1
+                const emptySlot: ActiveSlot = !squadSlots.star1
+                  ? 'star1'
+                  : !squadSlots.star2
+                  ? 'star2'
+                  : !squadSlots.star3
+                  ? 'star3'
+                  : 'star1';
+                handleAssignSlot(player, emptySlot);
+                setDetailedPlayer(null);
+              }}
+              onSwapThisStar={() => {
+                const slotToSwap: ActiveSlot = occupiedSlot || 'star1';
+                setDetailedPlayer(null);
+                setActiveSlot(slotToSwap);
+              }}
+              onDropPlayer={() => {
+                if (occupiedSlot) {
+                  handleClearSlot(occupiedSlot);
+                }
+              }}
+            />
+          );
+        })()}
 
       </div>
     </ErrorBoundary>

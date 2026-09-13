@@ -14,6 +14,7 @@ interface PlayerPickerModalProps {
   selectedPlayerIds?: string[];
   matches?: Match[];
   onSelectPlayer: (player: Competitor, targetSlot: ActiveSlot) => void;
+  onInspectPlayer?: (player: Competitor) => void;
 }
 
 const SLOT_TITLES: Record<ActiveSlot, string> = {
@@ -31,6 +32,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
   selectedPlayerIds = [],
   matches = [],
   onSelectPlayer,
+  onInspectPlayer,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGameFilter, setSelectedGameFilter] = useState<string>('ALL');
@@ -348,7 +350,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                   </div>
 
                   {/* Right Column: Whole Number Points Badge + Pick Button */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                     <div
                       className={`px-2 py-1 font-pixel text-[11px] sm:text-xs font-bold border rounded-xs shadow-xs whitespace-nowrap shrink-0 ${
                         isCurrentSlot
@@ -358,6 +360,20 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                     >
                       {player.score ? `${player.score.toLocaleString()} PTS` : '0 PTS'}
                     </div>
+
+                    {onInspectPlayer && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onInspectPlayer(player);
+                        }}
+                        className="touch-manipulation p-1 px-1.5 bg-[#fae5b8] hover:bg-white text-[#5c3509] border border-[#c99a57] font-pixel text-[9px] rounded-xs cursor-pointer shadow-xs active:translate-y-0.5"
+                        title={`Inspect real stats for ${player.displayName}`}
+                      >
+                        INFO
+                      </button>
+                    )}
 
                     <button
                       type="button"

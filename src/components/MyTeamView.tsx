@@ -1,5 +1,5 @@
 import React from 'react';
-import { Competitor, ActiveSlot, SquadSlots } from '../types';
+import { Competitor, ActiveSlot, SquadSlots, Match } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { PixelHelmetIcon } from './PixelBadges';
 import { RoomSetupBar } from './RoomSetupBar';
@@ -11,12 +11,14 @@ interface MyTeamViewProps {
   userName: string;
   roomCode: string;
   isLocked?: boolean;
+  matches?: Match[];
   onCommitUserName: (name: string) => void;
   onCommitRoomCode: (code: string) => void;
   onSelectSlot: (slotKey: ActiveSlot) => void;
   onClearSlot: (slotKey: ActiveSlot) => void;
   onToggleLock?: () => void;
   onLockedSlotAttempt?: () => void;
+  onInspectPlayer?: (player: Competitor) => void;
 }
 
 const SLOT_CONFIG: { key: ActiveSlot; label: string }[] = [
@@ -30,12 +32,14 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
   userName,
   roomCode,
   isLocked = false,
+  matches = [],
   onCommitUserName,
   onCommitRoomCode,
   onSelectSlot,
   onClearSlot,
   onToggleLock,
   onLockedSlotAttempt,
+  onInspectPlayer,
 }) => {
   // Count how many stars are set
   const filledSlots = [slots.star1, slots.star2, slots.star3].filter(Boolean) as Competitor[];
@@ -91,18 +95,66 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               ? splitPlayerFirstLastName(player.displayName)
               : { firstName: '', lastName: '' };
 
+            const playerTeam = (player?.teamCode || '').toUpperCase();
+            const playerMatch = player
+              ? (matches || []).find((m) => {
+                  return (
+                    m.homeTeamCode.toUpperCase() === playerTeam ||
+                    m.awayTeamCode.toUpperCase() === playerTeam
+                  );
+                })
+              : null;
+
+            const isGameLive =
+              playerMatch &&
+              (playerMatch.status === 'live' ||
+                (playerMatch.periodLabel && playerMatch.periodLabel.startsWith('Q')));
+
+            const gameSituation = playerMatch
+              ? `${playerMatch.periodLabel || 'LIVE'} · ${playerMatch.awayTeamCode} ${playerMatch.awayScore} - ${playerMatch.homeTeamCode} ${playerMatch.homeScore}`
+              : null;
+
+            const passYds = Number(
+              player?.stats?.pass_yds ??
+              player?.stats?.passing_yards ??
+              player?.stats?.passingYards ??
+              0
+            );
+            const rushYds = Number(
+              player?.stats?.rush_yds ??
+              player?.stats?.rushing_yards ??
+              player?.stats?.rushingYards ??
+              0
+            );
+            const recYds = Number(
+              player?.stats?.rec_yds ??
+              player?.stats?.receiving_yards ??
+              player?.stats?.receivingYards ??
+              0
+            );
+            const totalYds = passYds + rushYds + recYds;
+            const tds = Number(
+              player?.stats?.tds ??
+              player?.stats?.touchdowns ??
+              0
+            );
+
             return (
               <div
                 key={key}
                 onClick={() => {
-                  if (isLocked) {
-                    if (onLockedSlotAttempt) onLockedSlotAttempt();
-                    return;
+                  if (player) {
+                    onInspectPlayer?.(player);
+                  } else {
+                    if (isLocked) {
+                      if (onLockedSlotAttempt) onLockedSlotAttempt();
+                      return;
+                    }
+                    onSelectSlot(key);
                   }
-                  onSelectSlot(key);
                 }}
                 className={`touch-manipulation rounded-xs min-h-[260px] sm:min-h-[300px] flex flex-col items-center justify-between p-3 sm:p-4 relative transition-all box-border ${
-                  isLocked
+                  isLocked && !player
                     ? 'bg-[#e4cb9c] border-3 border-[#94713a] cursor-not-allowed shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]'
                     : 'bg-[#ebd2a4] border-3 border-[#c99a57] cursor-pointer hover:bg-[#fae9c8] group shadow-[0_4px_0_0_#a77b3b] active:translate-y-0.5'
                 }`}
@@ -165,14 +217,28 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Direct Live Stats on Card (e.g. 1 TD · 40 YDS) */}
+                    {/* Live Game Situation pill from matches e.g. "Q3 08:42 · BUF 24 - HOU 21" */}
+                    {isGameLive && gameSituation ? (
+                      <div className="w-full mt-1 py-1 px-1.5 bg-[#fef3c7] border border-[#f59e0b] rounded-xs text-center shadow-2xs">
+                        <div className="font-pixel text-[9px] sm:text-[10px] text-[#92400e] font-bold flex items-center justify-center gap-1.5 whitespace-nowrap">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-ping shrink-0" />
+                          <span className="truncate">{gameSituation}</span>
+                        </div>
+                      </div>
+                    ) : playerMatch && playerMatch.status === 'upcoming' ? (
+                      <div className="w-full mt-1 py-1 px-1.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs text-center">
+                        <div className="font-pixel text-[8px] sm:text-[9px] text-[#784610] truncate">
+                          {playerMatch.periodLabel} · vs {playerMatch.homeTeamCode === player.teamCode ? playerMatch.awayTeamCode : playerMatch.homeTeamCode}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Direct Live Stats on Card (e.g. 3 TD · 225 YDS) */}
                     <div className="w-full mt-1.5 py-1 px-2 bg-[#fae5b8]/80 border border-[#c99a57] rounded-xs text-center">
                       <div className="font-pixel text-[10px] sm:text-[11px] text-[#5c3509] font-bold whitespace-nowrap">
-                        {player.stats?.touchdowns ? `${player.stats.touchdowns} TD` : '0 TD'}
-                        {' · '}
-                        {(player.stats?.passingYards || 0) + (player.stats?.rushingYards || 0) > 0
-                          ? `${(player.stats?.passingYards || 0) + (player.stats?.rushingYards || 0)} YDS`
-                          : (player.stats?.receptions ? `${player.stats.receptions} REC` : 'LIVE')}
+                        {tds > 0 || totalYds > 0
+                          ? `${tds} TD · ${totalYds} YDS`
+                          : (isGameLive && gameSituation ? gameSituation : 'LIVE')}
                       </div>
                     </div>
 

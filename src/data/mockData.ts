@@ -119,8 +119,8 @@ export const SCORING_RULES: ScoringRule[] = [
     id: 'r4',
     sportId: 'nfl',
     eventType: 'yards_bonus',
-    displayName: 'Every 50 Yards',
+    displayName: '10 Yards Play',
     pointsValue: 1,
-    description: 'One point for every 50 total yards gained (integer division).',
+    description: 'Every 10 total passing, rushing, or receiving yards.',
   },
 ];

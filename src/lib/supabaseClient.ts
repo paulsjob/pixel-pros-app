@@ -51,14 +51,26 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
       if (row.short_name) {
         fetchedMap.set(row.short_name.toLowerCase(), row);
       }
+      if (row.display_name) {
+        fetchedMap.set(row.display_name.toLowerCase(), row);
+      }
     });
 
     const result = INITIAL_COMPETITORS.map((fallback) => {
-      const row = fetchedMap.get(fallback.id.toLowerCase()) || fetchedMap.get(fallback.shortName.toLowerCase());
+      const row =
+        fetchedMap.get(fallback.id.toLowerCase()) ||
+        fetchedMap.get(fallback.shortName.toLowerCase()) ||
+        fetchedMap.get(fallback.displayName.toLowerCase());
       if (!row) return fallback;
 
       const rawScore = row.score ?? row.fantasy_points ?? fallback.score;
       const wholeScore = Math.max(0, Math.round(Number(rawScore) || 0));
+
+      const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
+      const passYds = Number(statsObj.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? row.pass_yds ?? row.passing_yards ?? 0);
+      const rushYds = Number(statsObj.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? row.rush_yds ?? row.rushing_yards ?? 0);
+      const recYds = Number(statsObj.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? row.rec_yds ?? row.receiving_yards ?? 0);
+      const tds = Number(statsObj.tds ?? statsObj.touchdowns ?? row.tds ?? row.touchdowns ?? 0);
 
       return {
         ...fallback,
@@ -69,12 +81,18 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
         teamCode: (row.team_code || fallback.teamCode).toUpperCase(),
         position: row.position || fallback.position,
         score: wholeScore,
-        stats: row.stats || {
-          passingYards: Number(row.passing_yards || fallback.stats.passingYards),
-          rushingYards: Number(row.rushing_yards || fallback.stats.rushingYards),
-          touchdowns: Number(row.touchdowns || fallback.stats.touchdowns),
+        stats: {
+          ...statsObj,
+          pass_yds: passYds,
+          rush_yds: rushYds,
+          rec_yds: recYds,
+          tds: tds,
+          passingYards: passYds,
+          rushingYards: rushYds,
+          receivingYards: recYds,
+          touchdowns: tds,
           primaryMetricLabel: 'Touchdowns',
-          primaryMetricValue: Number(row.touchdowns || fallback.stats.touchdowns),
+          primaryMetricValue: tds,
         },
       };
     });
@@ -85,6 +103,12 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
       const alreadyExists = result.some(p => p.id.toLowerCase() === id.toLowerCase() || p.shortName.toLowerCase() === row.short_name?.toLowerCase());
       if (!alreadyExists) {
         const rawScore = row.score ?? row.fantasy_points ?? 0;
+        const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
+        const passYds = Number(statsObj.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? row.pass_yds ?? row.passing_yards ?? 0);
+        const rushYds = Number(statsObj.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? row.rush_yds ?? row.rushing_yards ?? 0);
+        const recYds = Number(statsObj.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? row.rec_yds ?? row.receiving_yards ?? 0);
+        const tds = Number(statsObj.tds ?? statsObj.touchdowns ?? row.tds ?? row.touchdowns ?? 0);
+
         result.push({
           id,
           sportId: 'nfl',
@@ -98,11 +122,17 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
           rating: Number(row.rating || 90),
           score: Math.max(0, Math.round(Number(rawScore) || 0)),
           stats: {
-            passingYards: Number(row.passing_yards || 0),
-            rushingYards: Number(row.rushing_yards || 0),
-            touchdowns: Number(row.touchdowns || 0),
+            ...statsObj,
+            pass_yds: passYds,
+            rush_yds: rushYds,
+            rec_yds: recYds,
+            tds: tds,
+            passingYards: passYds,
+            rushingYards: rushYds,
+            receivingYards: recYds,
+            touchdowns: tds,
             primaryMetricLabel: 'Touchdowns',
-            primaryMetricValue: Number(row.touchdowns || 0),
+            primaryMetricValue: tds,
           },
           badges: ['gold_star'],
           avatar: {
@@ -270,18 +300,29 @@ export async function upsertUserRoster(
   }
 }
 
+export const GHOST_USER_NAMES = ['P', 'PA', 'PAU', 'PAUL J'];
+
+export function isGhostUser(name?: string | null): boolean {
+  if (!name || !name.trim()) return true;
+  return GHOST_USER_NAMES.includes(name.trim().toUpperCase());
+}
+
 /**
  * Queries user_rosters where room_code = currentRoomCode.
+ * Filters out ghost entries where user_name in ('P', 'PA', 'PAU', 'PAUL J') or user_name is null.
  */
 export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
 
-  // Load local cache first
+  // Load local cache first (purging any ghost entries)
   let localRosters: UserRoster[] = [];
   try {
     const raw = localStorage.getItem(`pixel_pros_rosters_${cleanRoom}`);
     if (raw) {
-      localRosters = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localRosters = parsed.filter((r: UserRoster) => !isGhostUser(r.user_name));
+      }
     }
   } catch {
     // ignore
@@ -292,6 +333,8 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
       .from('user_rosters')
       .select('*')
       .eq('room_code', cleanRoom)
+      .not('user_name', 'is', null)
+      .not('user_name', 'in', '("P","PA","PAU","PAUL J")')
       .order('updated_at', { ascending: false });
 
     if (error || !data || data.length === 0) {
@@ -301,10 +344,12 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
     // Merge Supabase records with local records: deduplicate by device_id or user_name
     const map = new Map<string, UserRoster>();
     localRosters.forEach((r) => {
+      if (isGhostUser(r.user_name)) return;
       const key = r.device_id ? `dev_${r.device_id}` : `name_${r.user_name.toLowerCase()}`;
       map.set(key, r);
     });
     data.forEach((r: any) => {
+      if (isGhostUser(r.user_name)) return;
       const entry: UserRoster = {
         id: r.id,
         room_code: r.room_code,

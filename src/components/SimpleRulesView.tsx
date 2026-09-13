@@ -7,120 +7,121 @@ export const SimpleRulesView: React.FC = () => {
       title: 'TOUCHDOWN',
       points: '+6',
       unit: 'POINTS',
-      desc: 'Player runs or catches the ball into the endzone.',
+      desc: 'Player passes, rushes, or catches into the endzone.',
       badgeColor: 'bg-[#15803d] text-white border-[#14532d]',
       icon: '🏈',
-      example: '6 PTS instantly added to your team',
+      example: '+6 pts for every score',
     },
     {
       title: 'FIELD GOAL',
       points: '+3',
       unit: 'POINTS',
-      desc: 'Kicking the ball through the yellow goal posts.',
+      desc: 'Kick through the uprights.',
       badgeColor: 'bg-[#1d4ed8] text-white border-[#1e3a8a]',
       icon: '🥅',
-      example: '3 PTS added when the kick is good',
+      example: '+3 pts when kick is good',
     },
     {
-      title: 'BIG STOP / DEFENSE',
+      title: 'BIG STOP',
       points: '+2',
       unit: 'POINTS',
-      desc: 'Tackling the offense in the endzone, sack, or turnover.',
+      desc: 'Sack, turnover, or defensive stop.',
       badgeColor: 'bg-[#b45309] text-white border-[#78350f]',
       icon: '🛡️',
-      example: '2 PTS for defensive plays',
+      example: '+2 pts for defensive plays',
     },
     {
-      title: '50 YARDS PLAY',
+      title: '10 YARDS PLAY',
       points: '+1',
       unit: 'POINT',
-      desc: 'Every 50 total passing, rushing, or receiving yards.',
+      desc: 'Every 10 total passing, rushing, or receiving yards.',
       badgeColor: 'bg-[#7c3aed] text-white border-[#581c87]',
       icon: '⚡',
-      example: '1 PT per 50 yards (Whole numbers only!)',
+      example: '1 pt added for every first down or big gain!',
+      subnote: '+1 pt for every 10 total scrimmage yards.',
     },
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-150">
+    <div className="w-full max-w-2xl mx-auto space-y-3 sm:space-y-3.5 animate-in fade-in duration-150">
       
       {/* Title Header */}
       <div className="text-center">
-        <div className="flex items-center justify-center gap-2 mb-1">
-          <BookOpen size={28} className="text-[#38bdf8]" />
-          <h1 className="font-pixel text-xl sm:text-3xl text-[#fae5b8] tracking-widest drop-shadow-[0_4px_0_#0f172a]">
+        <div className="flex items-center justify-center gap-2 mb-0.5">
+          <BookOpen size={22} className="text-[#38bdf8]" />
+          <h1 className="font-pixel text-base sm:text-xl text-[#fae5b8] tracking-widest drop-shadow-[0_2px_0_#0f172a]">
             HOW SCORING WORKS
           </h1>
         </div>
-        <p className="font-retro text-xs sm:text-sm text-[#fae5b8]/80 max-w-lg mx-auto">
-          Easy whole-number points. Simple for kids and grandparents to follow during any game!
+        <p className="font-retro text-[11px] sm:text-xs text-[#fae5b8]/80 max-w-md mx-auto">
+          Easy whole-number points. Simple for kids and grandparents to follow live!
         </p>
       </div>
 
-      {/* 4 Clean, Bold Retro Cards with High Contrast */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+      {/* 4 Clean Retro Cards with High Contrast & No Overflow */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
         {scoringCards.map((card) => (
           <div
             key={card.title}
-            className="pixel-box-cream p-5 sm:p-6 rounded-xs flex flex-col justify-between shadow-[0_6px_0_0_#0a0f1d] hover:translate-y-[-2px] transition-transform"
+            className="pixel-box-cream p-3 sm:p-3.5 rounded-xs flex flex-col justify-between shadow-[0_4px_0_0_#0a0f1d] border-2 border-[#c99a57]"
           >
             <div>
               {/* Header with Title and Emoji Icon */}
-              <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl select-none" role="img" aria-label={card.title}>
+              <div className="flex items-center justify-between border-b border-[#d4a86a] pb-1.5 mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg select-none" role="img" aria-label={card.title}>
                     {card.icon}
                   </span>
-                  <h2 className="font-pixel text-sm sm:text-base text-[#5c3509] tracking-wider uppercase">
+                  <h2 className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase">
                     {card.title}
                   </h2>
                 </div>
               </div>
 
-              {/* Big High-Contrast Points Display */}
-              <div className="flex items-baseline gap-2.5 my-3">
+              {/* High-Contrast Points Display */}
+              <div className="flex items-baseline gap-2 my-1.5">
                 <span
-                  className={`font-pixel text-3xl sm:text-4xl font-extrabold px-3.5 py-1.5 border-3 rounded-xs shadow-md tracking-tight ${card.badgeColor}`}
+                  className={`font-pixel text-2xl sm:text-3xl font-extrabold px-2.5 py-0.5 border-2 rounded-xs shadow-xs tracking-tight ${card.badgeColor}`}
                 >
                   {card.points}
                 </span>
-                <span className="font-pixel text-base sm:text-lg text-[#5c3509] tracking-wider">
+                <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider">
                   {card.unit}
                 </span>
               </div>
 
-              {/* Explanatory Description */}
-              <p className="font-retro text-xs sm:text-sm text-[#5c3509] leading-relaxed mt-2">
+              {/* Explanatory Description (Clean, concise, no clipping) */}
+              <p className="font-retro text-xs text-[#5c3509] leading-snug mt-1">
                 {card.desc}
               </p>
             </div>
 
-            {/* Quick scanning highlight */}
-            <div className="mt-4 pt-3 border-t border-[#d4a86a]/60 flex items-center gap-1.5 text-[11px] font-retro text-[#784610]">
-              <CheckCircle2 size={13} className="text-[#16a34a] shrink-0" />
-              <span>{card.example}</span>
+            {/* Scanning highlight */}
+            <div className="mt-2.5 pt-2 border-t border-[#d4a86a]/60 flex items-center gap-1.5 text-[10px] sm:text-[11px] font-retro text-[#784610]">
+              <CheckCircle2 size={12} className="text-[#16a34a] shrink-0" />
+              <span className="truncate">{card.example}</span>
             </div>
           </div>
         ))}
       </div>
 
       {/* Quick 2-Second Guide Footer */}
-      <div className="pixel-box-cream p-4 sm:p-5 rounded-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#fae9c8] border-2 border-[#c99a57] rounded-xs flex items-center justify-center shrink-0">
-            <Award size={22} className="text-[#b45309]" />
+      <div className="pixel-box-cream p-2.5 sm:p-3 rounded-xs flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left border-2 border-[#c99a57]">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-[#fae9c8] border border-[#c99a57] rounded-xs flex items-center justify-center shrink-0">
+            <Award size={18} className="text-[#b45309]" />
           </div>
           <div>
-            <h3 className="font-pixel text-xs sm:text-sm text-[#5c3509]">
+            <h3 className="font-pixel text-[11px] sm:text-xs text-[#5c3509]">
               WHOLE NUMBERS ONLY
             </h3>
-            <p className="font-retro text-[11px] sm:text-xs text-[#784610]">
-              No confusing decimals like 0.04 pts. Kids can do the math on their fingers!
+            <p className="font-retro text-[10px] sm:text-[11px] text-[#784610]">
+              No confusing decimals. Kids can do all the math on their fingers!
             </p>
           </div>
         </div>
 
-        <div className="font-pixel text-xs px-3 py-1.5 bg-[#12579b] text-[#fae5b8] border-2 border-[#0a2d52] rounded-xs shadow-xs shrink-0">
+        <div className="font-pixel text-[10px] sm:text-xs px-2.5 py-1 bg-[#12579b] text-[#fae5b8] border border-[#0a2d52] rounded-xs shadow-xs shrink-0 whitespace-nowrap">
           3 PLAYERS PER WEEK
         </div>
       </div>
