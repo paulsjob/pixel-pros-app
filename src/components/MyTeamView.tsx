@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { Competitor, UserProfile } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
-import { PixelCoin, PixelHelmetIcon } from './PixelBadges';
-import { ArrowUpDown, BarChart3, Shirt, Plus, Sparkles, X } from 'lucide-react';
+import { PixelHelmetIcon } from './PixelBadges';
+import { RoomSetupBar } from './RoomSetupBar';
+import { ArrowUpDown, BarChart3, Sparkles, X } from 'lucide-react';
 
 interface MyTeamViewProps {
   roster: Competitor[];
   user: UserProfile;
   selectedPlayers: Competitor[];
+  userName: string;
+  roomCode: string;
+  onUserNameChange: (name: string) => void;
+  onRoomCodeChange: (code: string) => void;
   onSelectSlot: (index: number) => void;
   onOpenPlayerDetail: (player: Competitor) => void;
-  onOpenLockerRoom: () => void;
   onOpenStatsModal: () => void;
   onTogglePlayer: (player: Competitor) => void;
   onClearSlot?: (index: number) => void;
@@ -22,9 +26,12 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
   roster = [],
   user,
   selectedPlayers = [],
+  userName,
+  roomCode,
+  onUserNameChange,
+  onRoomCodeChange,
   onSelectSlot,
   onOpenPlayerDetail,
-  onOpenLockerRoom,
   onOpenStatsModal,
   onTogglePlayer,
   onClearSlot,
@@ -55,22 +62,25 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
 
   return (
     <div className="w-full max-w-md md:max-w-5xl mx-auto px-0 box-border overflow-hidden">
-      {/* Top Banner Header */}
-      <div className="text-center mb-4 sm:mb-6">
-        <div className="flex items-center justify-center gap-2.5 mb-1">
-          <PixelHelmetIcon size={32} color="#155e9e" />
-          <h1 className="font-pixel text-xl sm:text-3xl text-[#fae5b8] tracking-widest drop-shadow-[0_4px_0_#0f172a]">
-            PIXEL PROS
-          </h1>
-        </div>
+      
+      {/* Shared Multi-Device Room Setup Bar */}
+      <RoomSetupBar
+        userName={userName}
+        roomCode={roomCode}
+        onUserNameChange={onUserNameChange}
+        onRoomCodeChange={onRoomCodeChange}
+      />
 
-        <div className="flex items-center justify-center gap-3 sm:gap-4">
-          <h2 className="font-pixel text-lg sm:text-2xl text-[#fae5b8] tracking-wider drop-shadow-[0_3px_0_#0f172a]">
+      {/* Top Banner Header */}
+      <div className="text-center mb-3 sm:mb-5">
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
+          <PixelHelmetIcon size={28} color="#155e9e" />
+          <h1 className="font-pixel text-lg sm:text-2xl text-[#fae5b8] tracking-wider drop-shadow-[0_3px_0_#0f172a]">
             MY TEAM
-          </h2>
-          <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1 bg-[#fae5b8] border-3 border-[#1a2238] shadow-[0_3px_0_0_#0a0f1d] text-[#5c3509] font-pixel text-xs">
-            <PixelCoin size={16} />
-            <span>{user.coins.toLocaleString()}</span>
+          </h1>
+          <div className="flex items-center gap-1 px-2.5 sm:px-3 py-1 bg-[#12579b] border-2 border-[#0a2d52] shadow-[0_3px_0_0_#051a30] text-[#fae5b8] font-pixel text-[11px] sm:text-xs whitespace-nowrap">
+            <span className="text-[#38bdf8]">TOTAL:</span>
+            <span>{totalTeamPoints.toLocaleString()} PTS</span>
           </div>
         </div>
       </div>
@@ -106,7 +116,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 max-h-[290px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-1">
               {sortedRoster.map((player) => {
                 const isSelected = safeSelected.some((p) => p.id === player.id);
                 return (
@@ -140,8 +150,8 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                     </span>
 
                     {/* Score */}
-                    <span className="font-pixel text-[9px] text-[#12579b] font-bold">
-                      {player.score.toLocaleString()}
+                    <span className="font-pixel text-[9px] text-[#12579b] font-bold whitespace-nowrap">
+                      {player.score ? `${player.score.toLocaleString()} PTS` : '0 PTS'}
                     </span>
 
                     {isSelected && (
@@ -166,7 +176,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
 
         </div>
 
-        {/* RIGHT COLUMN: 3 Star Slots + Combined Output + Locker Room */}
+        {/* RIGHT COLUMN: 3 Star Slots + Combined Output */}
         <div className="md:col-span-8 flex flex-col gap-4 sm:gap-6 w-full max-w-full overflow-hidden box-border order-1 md:order-2">
           
           {/* Top Panel: PICK ANY 3 STARS */}
@@ -178,10 +188,10 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                   <span>PICK ANY 3 STARS</span>
                 </h2>
                 <p className="font-retro text-[10px] sm:text-[11px] text-[#784610] mt-0.5">
-                  Dead-Simple Couch Model: Pick ANY real NFL athlete — no position rules!
+                  Dead-Simple Couch Model: Pick ANY 3 real NFL players for your room
                 </p>
               </div>
-              <span className="font-pixel text-[11px] sm:text-xs text-[#fae5b8] bg-[#12579b] px-2.5 py-1 border border-[#0a2d52] rounded-xs shrink-0">
+              <span className="font-pixel text-[11px] sm:text-xs text-[#fae5b8] bg-[#12579b] px-2.5 py-1 border border-[#0a2d52] rounded-xs shrink-0 whitespace-nowrap">
                 {safeSelected.length}/3 SET
               </span>
             </div>
@@ -200,7 +210,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                   >
                     {/* Star Slot Badge Header */}
                     <div className="w-full flex items-center justify-between mb-1.5">
-                      <span className="px-2 py-0.5 bg-[#12579b] text-[#fae5b8] font-pixel text-[9px] sm:text-[11px] border border-[#0a2d52] rounded-xs shadow-xs font-bold tracking-wider">
+                      <span className="px-2 py-0.5 bg-[#12579b] text-[#fae5b8] font-pixel text-[9px] sm:text-[11px] border border-[#0a2d52] rounded-xs shadow-xs font-bold tracking-wider whitespace-nowrap">
                         {starLabel}
                       </span>
                       {player && (
@@ -214,7 +224,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                               onTogglePlayer(player);
                             }
                           }}
-                          className="touch-manipulation w-5 h-5 bg-[#b91c1c] hover:bg-[#dc2626] text-[#fae5b8] border border-[#1a2238] flex items-center justify-center font-pixel text-[9px] rounded-2xs active:translate-y-0.5"
+                          className="touch-manipulation w-5 h-5 bg-[#b91c1c] hover:bg-[#dc2626] text-[#fae5b8] border border-[#1a2238] flex items-center justify-center font-pixel text-[9px] rounded-2xs active:translate-y-0.5 shrink-0"
                           title={`Clear ${starLabel}`}
                         >
                           <X size={12} />
@@ -253,53 +263,42 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                         {/* Bold Score Badge */}
                         <div className="w-full mt-2 text-center">
                           <div className="px-2 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-[10px] sm:text-xs border border-[#0a2d52] shadow-[0_2px_0_0_#051a30] rounded-xs font-bold whitespace-nowrap">
-                            {player.score.toLocaleString()} PTS
+                            {player.score ? `${player.score.toLocaleString()} PTS` : '0 PTS'}
                           </div>
                         </div>
                       </>
                     ) : (
-                      <>
-                        {/* Big Grey Silhouette */}
-                        <div className="my-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                          <PixelPlayerSprite
-                            isSilhouette={true}
-                            size="md"
-                          />
+                      /* Empty Slot - Prompt to Pick */
+                      <div className="flex-1 flex flex-col items-center justify-center py-4 w-full border-2 border-dashed border-[#c99a57] rounded-xs group-hover:border-[#12579b] group-hover:bg-[#f6ebd4] transition-all my-2">
+                        <div className="w-10 h-10 rounded-full bg-[#fae5b8] border-2 border-[#c99a57] flex items-center justify-center text-[#12579b] group-hover:scale-110 transition-transform mb-2">
+                          <span className="font-pixel text-lg font-bold">+</span>
                         </div>
-
-                        <div className="text-center my-1">
-                          <span className="font-retro text-[10px] sm:text-[11px] text-[#8c735d] group-hover:text-[#5c3509] transition-colors flex items-center justify-center gap-1">
-                            <Plus size={13} /> TAP TO PICK
-                          </span>
-                        </div>
-
-                        {/* Empty Score Placeholder */}
-                        <div className="w-full mt-1">
-                          <div className="px-2 py-1 bg-[#d4a86a]/40 text-[#784610] font-pixel text-[10px] border border-dashed border-[#c99a57] rounded-xs text-center">
-                            EMPTY
-                          </div>
-                        </div>
-                      </>
+                        <span className="font-pixel text-[10px] sm:text-xs text-[#5c3509] group-hover:text-[#12579b] text-center px-1">
+                          TAP TO PICK
+                        </span>
+                        <span className="font-retro text-[9px] text-[#784610] mt-0.5">
+                          ANY NFL STAR
+                        </span>
+                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
-
-            {/* Total Lineup Score Callout */}
-            <div className="mt-3.5 p-2 sm:p-2.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex items-center justify-between">
-              <span className="font-pixel text-[10px] sm:text-xs text-[#5c3509]">
-                LINEUP TOTAL SCORE
-              </span>
-              <span className="font-pixel text-xs sm:text-sm text-[#12579b] font-bold">
-                {totalTeamPoints.toLocaleString()} PTS
-              </span>
-            </div>
           </div>
 
-          {/* Aggregate Stats */}
-          <div className="pixel-box-cream p-3 sm:p-5 rounded-xs space-y-2 sm:space-y-3">
-            <div className="flex justify-between items-center whitespace-nowrap border-b-2 border-[#d4a86a] pb-2">
+          {/* COMBINED 3-STAR OUTPUT */}
+          <div className="pixel-box-cream p-3 sm:p-4 rounded-xs space-y-2.5">
+            <div className="flex justify-between items-center border-b border-[#d4a86a] pb-2">
+              <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider">
+                COMBINED 3-STAR OUTPUT
+              </span>
+              <span className="font-pixel text-xs sm:text-sm text-[#12579b] font-bold whitespace-nowrap">
+                {totalTeamPoints.toLocaleString()} TOTAL PTS
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center whitespace-nowrap">
               <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider whitespace-nowrap">
                 PASSING YARDS
               </span>
@@ -308,7 +307,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               </span>
             </div>
 
-            <div className="flex justify-between items-center whitespace-nowrap border-b-2 border-[#d4a86a] pb-2">
+            <div className="flex justify-between items-center whitespace-nowrap">
               <span className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider whitespace-nowrap">
                 RUSHING YARDS
               </span>
@@ -326,15 +325,6 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               </span>
             </div>
           </div>
-
-          {/* LOCKER ROOM BUTTON */}
-          <button
-            onClick={onOpenLockerRoom}
-            className="touch-manipulation w-full py-3.5 sm:py-4 px-6 bg-[#12579b] hover:bg-[#186abb] text-[#fae5b8] font-pixel text-xs sm:text-base border-3 border-[#0a2d52] shadow-[0_4px_0_0_#051a30] cursor-pointer flex items-center justify-center gap-3 active:translate-y-0.5 active:shadow-none transition-all tracking-wider"
-          >
-            <Shirt size={20} />
-            <span>LOCKER ROOM</span>
-          </button>
 
         </div>
 

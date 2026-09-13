@@ -48,29 +48,6 @@ export const PixelDiamondCrystal: React.FC<{ size?: number; className?: string }
   </svg>
 );
 
-export const PixelCoin: React.FC<{ size?: number; value?: string | number }> = ({ size = 22, value = '1' }) => (
-  <div className="inline-flex items-center gap-1.5 select-none">
-    <svg
-      viewBox="0 0 16 16"
-      width={size}
-      height={size}
-      style={{ shapeRendering: 'crispEdges' }}
-      className="drop-shadow-sm shrink-0"
-    >
-      <rect x="4" y="1" width="8" height="14" fill="#f59e0b" />
-      <rect x="2" y="3" width="12" height="10" fill="#f59e0b" />
-      <rect x="1" y="4" width="14" height="8" fill="#d97706" />
-      {/* Coin border and rim */}
-      <rect x="3" y="3" width="10" height="10" fill="#fbbf24" />
-      <rect x="4" y="2" width="6" height="2" fill="#fef3c7" />
-      {/* Coin center '1' */}
-      <rect x="8" y="5" width="2" height="6" fill="#b45309" />
-      <rect x="7" y="6" width="1" height="1" fill="#b45309" />
-      <rect x="7" y="11" width="4" height="1" fill="#b45309" />
-    </svg>
-  </div>
-);
-
 export const PixelHelmetIcon: React.FC<{ size?: number; color?: string; className?: string }> = ({ size = 26, color = '#155e9e', className = '' }) => (
   <svg
     viewBox="0 0 20 20"

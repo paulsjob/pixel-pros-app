@@ -1,39 +1,72 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   INITIAL_COMPETITORS,
   INITIAL_USER,
-  INITIAL_LEADERBOARD_FRIENDS,
-  INITIAL_LEADERBOARD_GLOBAL,
   LIVE_MATCHES,
 } from './data/mockData';
-import { Competitor, UserProfile, AvatarConfig, Match } from './types';
-import { subscribeToRealtimeScores, fetchLiveNFLCompetitors } from './lib/supabaseClient';
+import { Competitor, UserProfile, Match, UserRoster } from './types';
+import {
+  subscribeToRealtimeScores,
+  fetchLiveNFLCompetitors,
+  fetchLiveNFLMatches,
+  upsertUserRoster,
+  fetchRoomRosters,
+} from './lib/supabaseClient';
 import { MyTeamView } from './components/MyTeamView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { LiveScoresView } from './components/LiveScoresView';
 import { SimpleRulesView } from './components/SimpleRulesView';
 import { PlayerCardModal } from './components/PlayerCardModal';
 import { PlayerPickerModal } from './components/PlayerPickerModal';
-import { LockerRoomModal } from './components/LockerRoomModal';
 import { DatabaseSchemaView } from './components/DatabaseSchemaView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PixelHelmetIcon } from './components/PixelBadges';
-import { Users, Trophy, BookOpen, Shirt, Activity, Database } from 'lucide-react';
+import { Users, Trophy, BookOpen, Activity, Database } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'team' | 'live' | 'leaderboard' | 'rules'>('team');
   
-  // App state
-  const [user, setUser] = useState<UserProfile>(INITIAL_USER);
+  // Room Code & User Name state (persisted to localStorage)
+  const [userName, setUserName] = useState<string>(() => {
+    try {
+      return localStorage.getItem('pixel_pros_user_name') || 'YOU';
+    } catch {
+      return 'YOU';
+    }
+  });
+
+  const [roomCode, setRoomCode] = useState<string>(() => {
+    try {
+      return (localStorage.getItem('pixel_pros_room_code') || 'COUCH').toUpperCase();
+    } catch {
+      return 'COUCH';
+    }
+  });
+
+  const [roomRosters, setRoomRosters] = useState<UserRoster[]>([]);
+
+  // User lineup state
+  const [user, setUser] = useState<UserProfile>(() => {
+    try {
+      const savedStars = localStorage.getItem('pixel_pros_user_stars');
+      if (savedStars) {
+        const parsed = JSON.parse(savedStars);
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          return { ...INITIAL_USER, selectedPlayerIds: parsed };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return INITIAL_USER;
+  });
+
   const [roster, setRoster] = useState<Competitor[]>(INITIAL_COMPETITORS);
   const [matches, setMatches] = useState<Match[]>(LIVE_MATCHES);
-  const [friendsList, setFriendsList] = useState(INITIAL_LEADERBOARD_FRIENDS);
-  const [globalList] = useState(INITIAL_LEADERBOARD_GLOBAL);
 
   // Modals state
   const [detailedPlayer, setDetailedPlayer] = useState<Competitor | null>(null);
   const [pickerSlotIndex, setPickerSlotIndex] = useState<number | null>(null);
-  const [isLockerRoomOpen, setIsLockerRoomOpen] = useState(false);
   const [isDbDrawerOpen, setIsDbDrawerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -44,32 +77,85 @@ export default function App() {
     }, 3200);
   };
 
-  // 🏈 Live Data Hookup: Fetch authentic NFL athletes directly from Supabase competitors table
+  // Sync picks directly to Supabase table user_rosters
+  const syncLineupToSupabase = useCallback(
+    async (rCode: string, uName: string, starIds: string[]) => {
+      const star1 = starIds[0] || '';
+      const star2 = starIds[1] || '';
+      const star3 = starIds[2] || '';
+      await upsertUserRoster(rCode, uName, star1, star2, star3);
+      // Refresh room rosters
+      const updated = await fetchRoomRosters(rCode);
+      setRoomRosters(updated);
+    },
+    []
+  );
+
+  // Handle Room Code Change
+  const handleRoomCodeChange = (newCode: string) => {
+    const clean = newCode.trim().toUpperCase() || 'COUCH';
+    setRoomCode(clean);
+    try {
+      localStorage.setItem('pixel_pros_room_code', clean);
+    } catch {
+      // ignore
+    }
+    syncLineupToSupabase(clean, userName, user.selectedPlayerIds || []);
+    showToast(`Switched to room "${clean}"`);
+  };
+
+  // Handle User Name Change
+  const handleUserNameChange = (newName: string) => {
+    setUserName(newName);
+    try {
+      localStorage.setItem('pixel_pros_user_name', newName);
+    } catch {
+      // ignore
+    }
+    syncLineupToSupabase(roomCode, newName, user.selectedPlayerIds || []);
+  };
+
+  // 🏈 Live Data Hookup: Fetch real NFL athletes & real games directly from Supabase
   useEffect(() => {
     let isMounted = true;
-    async function loadLiveAthletes() {
-      const athletes = await fetchLiveNFLCompetitors();
-      if (isMounted && athletes && athletes.length > 0) {
-        setRoster(athletes);
+    async function loadLiveSupabaseData() {
+      try {
+        const [athletes, liveMatches, initialRosters] = await Promise.all([
+          fetchLiveNFLCompetitors(),
+          fetchLiveNFLMatches(),
+          fetchRoomRosters(roomCode),
+        ]);
+        if (isMounted) {
+          if (athletes && athletes.length > 0) {
+            setRoster(athletes);
+          }
+          if (liveMatches && liveMatches.length > 0) {
+            setMatches(liveMatches);
+          }
+          if (initialRosters) {
+            setRoomRosters(initialRosters);
+          }
+        }
+      } catch (err) {
+        console.warn('Live Supabase data initialization:', err);
       }
     }
-    loadLiveAthletes();
+    loadLiveSupabaseData();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [roomCode]);
 
-  // ⚡ Connect Realtime Wire: Subscribes to Supabase postgres_changes
-  // When Python Poller writes a score to Supabase, numbers flip upward instantly with zero page reload
+  // ⚡ Connect Realtime Wire: Subscribes to Supabase postgres_changes for competitors, matches, and user_rosters
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeScores(
-      (payload) => {
-        const updated = payload?.new as any;
+      (competitorPayload) => {
+        const updated = competitorPayload?.new as any;
         if (updated && (updated.id || updated.short_name)) {
           setRoster((prev) =>
             (prev || []).map((p) => {
               if (p.id === updated.id || p.shortName === updated.short_name) {
-                const newScore = updated.score ?? (p.score + 50);
+                const newScore = updated.score ?? p.score;
                 return {
                   ...p,
                   score: newScore,
@@ -79,32 +165,68 @@ export default function App() {
               return p;
             })
           );
-          showToast(`⚡ REALTIME WIRE: ${updated.short_name || 'Player'} updated to ${updated.score?.toLocaleString() || ''} PTS!`);
+          showToast(`⚡ REALTIME: ${updated.short_name || 'Player'} updated to ${updated.score ?? 0} PTS!`);
         }
       },
       (matchPayload) => {
         const updatedMatch = matchPayload?.new as any;
         if (updatedMatch && updatedMatch.id) {
-          setMatches((prev) =>
-            (prev || []).map((m) =>
-              m.id === updatedMatch.id ? { ...m, ...updatedMatch } : m
-            )
-          );
+          setMatches((prev) => {
+            const exists = (prev || []).some((m) => m.id === updatedMatch.id);
+            if (exists) {
+              return (prev || []).map((m) =>
+                m.id === updatedMatch.id ? { ...m, ...updatedMatch } : m
+              );
+            }
+            return [updatedMatch, ...(prev || [])];
+          });
+        }
+      },
+      (rosterPayload) => {
+        const updatedRoster = rosterPayload?.new as any;
+        if (updatedRoster && updatedRoster.room_code === roomCode.toUpperCase()) {
+          fetchRoomRosters(roomCode).then(setRoomRosters);
+          showToast(`⚡ ROOM UPDATE: ${updatedRoster.user_name} updated their 3 Stars!`);
         }
       }
     );
 
+    // Also listen to local cross-tab event
+    const handleLocalRosterUpdate = () => {
+      fetchRoomRosters(roomCode).then(setRoomRosters);
+    };
+    window.addEventListener('pixel_pros_roster_update', handleLocalRosterUpdate);
+
     return () => {
       unsubscribe();
+      window.removeEventListener('pixel_pros_roster_update', handleLocalRosterUpdate);
     };
-  }, []);
+  }, [roomCode]);
 
   // 3 selected players for the active lineup (STAR 1, STAR 2, STAR 3)
-  const safeUserSelectedIds = user?.selectedPlayerIds || [];
+  const safeUserSelectedIds = user?.selectedPlayerIds || ['mahomes', 'henry', 'lamb'];
   const selectedPlayers = [0, 1, 2].map((slotIdx) => {
     const id = safeUserSelectedIds[slotIdx];
     return (roster || []).find((p) => p.id === id) || null;
   }).filter(Boolean) as Competitor[];
+
+  // Calculate live total score from chosen 3 stars
+  const userTotalPoints = selectedPlayers.reduce((sum, p) => sum + (p?.score || 0), 0);
+  const activeUser: UserProfile = {
+    ...user,
+    username: userName,
+    totalScore: userTotalPoints,
+  };
+
+  // Helper to persist chosen 3 star IDs
+  const persistStars = (ids: string[]) => {
+    try {
+      localStorage.setItem('pixel_pros_user_stars', JSON.stringify(ids));
+    } catch {
+      // ignore
+    }
+    syncLineupToSupabase(roomCode, userName, ids);
+  };
 
   // Assign any real NFL athlete into a specific STAR slot (STAR 1, 2, or 3)
   const handleAssignSlot = (player: Competitor, slotIndex: number) => {
@@ -113,13 +235,14 @@ export default function App() {
       while (currentIds.length < 3) {
         currentIds.push('');
       }
-      // If player is already in another slot, clear that slot to avoid duplicate
+      // If player is already in another slot, clear that slot to avoid duplicates
       for (let i = 0; i < 3; i++) {
         if (currentIds[i] === player.id) {
           currentIds[i] = '';
         }
       }
       currentIds[slotIndex] = player.id;
+      persistStars(currentIds);
       return {
         ...prev,
         selectedPlayerIds: currentIds,
@@ -135,6 +258,7 @@ export default function App() {
       if (currentIds[slotIndex]) {
         currentIds[slotIndex] = '';
       }
+      persistStars(currentIds);
       return {
         ...prev,
         selectedPlayerIds: currentIds,
@@ -147,10 +271,14 @@ export default function App() {
   const handleTogglePlayer = (player: Competitor) => {
     const isSelected = safeUserSelectedIds.includes(player.id);
     if (isSelected) {
-      setUser((prev) => ({
-        ...prev,
-        selectedPlayerIds: prev.selectedPlayerIds.map((id) => (id === player.id ? '' : id)),
-      }));
+      setUser((prev) => {
+        const nextIds = prev.selectedPlayerIds.map((id) => (id === player.id ? '' : id));
+        persistStars(nextIds);
+        return {
+          ...prev,
+          selectedPlayerIds: nextIds,
+        };
+      });
       showToast(`Removed ${player.displayName} from your 3 Stars.`);
     } else {
       // Find first empty slot
@@ -169,80 +297,40 @@ export default function App() {
     setPickerSlotIndex(slotIndex);
   };
 
-  // Locker room avatar save
-  const handleSaveAvatar = (newAvatar: AvatarConfig, newCoins: number) => {
-    setUser(prev => ({
-      ...prev,
-      avatar: newAvatar,
-      coins: newCoins,
-    }));
-    // Also update Jeerice Henry (mock player #88) if user customized him
-    setRoster(prev =>
-      (prev || []).map(p => {
-        if (p.displayName === 'Jeerice Henry') {
-          return {
-            ...p,
-            avatar: newAvatar,
-            uniformNumber: newAvatar.number,
-          };
-        }
-        return p;
-      })
-    );
-    showToast('New gear equipped in Locker Room!');
-  };
-
   // Scoring whole-number points from live plays or rule tester
-  const handleScorePoints = (points: number, eventName: string) => {
-    setUser(prev => ({
-      ...prev,
-      totalScore: prev.totalScore + points,
-      coins: prev.coins + points * 10,
-    }));
-
-    // Update friend rank score for "YOU"
-    setFriendsList(prev =>
-      (prev || []).map(item =>
-        item.isYou ? { ...item, score: item.score + points } : item
-      )
-    );
-
-    showToast(`+${points} WHOLE POINTS! (${eventName}) 🎉`);
-  };
-
   const handleSimulatePlay = (player: Competitor, eventName: string, points: number) => {
-    // Increment player stats
-    setRoster(prev =>
-      (prev || []).map(p => {
+    // Increment player stats with integer whole points
+    setRoster((prev) =>
+      (prev || []).map((p) => {
         if (p.id === player.id) {
           return {
             ...p,
             stats: {
               ...p.stats,
               touchdowns: (p.stats?.touchdowns || 0) + 1,
-              passingYards: (p.stats?.passingYards || 0) + 40,
+              passingYards: (p.stats?.passingYards || 0) + 50,
             },
-            score: (p.score || 0) + points * 50,
+            score: (p.score || 0) + points,
           };
         }
         return p;
       })
     );
 
-    // Update match score
-    setMatches(prev =>
-      (prev || []).map(m =>
-        m.id === 'm1'
+    // Update match score if matches exist
+    setMatches((prev) =>
+      (prev || []).map((m, idx) =>
+        idx === 0
           ? {
               ...m,
-              homeScore: m.homeScore + points,
+              homeScore: (m.homeScore || 0) + points,
               recentEvent: `${player.shortName} +${points} PTS (${eventName})`,
             }
           : m
       )
     );
 
-    handleScorePoints(points, `${player.shortName} ${eventName}`);
+    showToast(`+${points} WHOLE PTS: ${player.shortName} (${eventName}) 🎉`);
   };
 
   return (
@@ -253,14 +341,14 @@ export default function App() {
         <header className="flex-shrink-0 z-40 bg-[#080d1a] border-b-3 border-[#1a264a] w-full max-w-full px-2 sm:px-4 py-1.5 sm:py-2 shadow-md overflow-x-hidden box-border">
           <div className="w-full max-w-full flex items-center justify-between gap-1 sm:gap-3 flex-nowrap overflow-x-hidden">
             
-            {/* Logo & Brand */}
+            {/* Logo & Brand: Hide text "Pixel Pros" on mobile headers; display only retro helmet icon */}
             <button
               onClick={() => setCurrentTab('team')}
-              className="touch-manipulation flex items-center gap-1 sm:gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left shrink-0"
+              className="touch-manipulation flex items-center gap-1.5 sm:gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left shrink-0"
               title="Return to My Team"
             >
-              <PixelHelmetIcon size={22} color={user?.avatar?.helmetColor || '#155e9e'} />
-              <span className="font-pixel text-[11px] sm:text-base text-[#fae5b8] tracking-wider group-hover:text-[#ffffff] transition-colors whitespace-nowrap">
+              <PixelHelmetIcon size={24} color={activeUser?.avatar?.helmetColor || '#155e9e'} />
+              <span className="hidden sm:inline font-pixel text-[11px] sm:text-base text-[#fae5b8] tracking-wider group-hover:text-[#ffffff] transition-colors whitespace-nowrap">
                 PIXEL PROS
               </span>
             </button>
@@ -272,7 +360,7 @@ export default function App() {
                 { id: 'live', label: 'LIVE SCORES', icon: Activity },
                 { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
                 { id: 'rules', label: 'RULES', icon: BookOpen },
-              ].map(tab => {
+              ].map((tab) => {
                 const Icon = tab.icon;
                 const isActive = currentTab === tab.id;
                 return (
@@ -293,27 +381,18 @@ export default function App() {
               })}
             </nav>
 
-            {/* User Status & Gear Locker Room */}
+            {/* Room & Live Score Header Badges */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              {/* Compact Score Badge on Mobile (Hide "SCORE:" label under 640px) */}
-              <div className="flex items-center gap-1 px-1.5 sm:px-2.5 py-1.5 sm:py-2 bg-[#1a2238] border border-[#273552] rounded-xs font-pixel text-[10px] sm:text-xs text-[#fae5b8] whitespace-nowrap">
-                <span className="text-[#38bdf8] hidden sm:inline">SCORE: </span>
-                <span>
-                  {(user?.totalScore ?? 0) >= 10000
-                    ? `${((user?.totalScore ?? 0) / 1000).toFixed(1)}K`
-                    : (user?.totalScore ?? 0).toLocaleString()}
-                </span>
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-[#1a2238] border border-[#273552] rounded-xs font-pixel text-[10px] sm:text-xs text-[#fae5b8] whitespace-nowrap">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse"></span>
+                <span className="text-[#38bdf8] hidden sm:inline">ROOM:</span>
+                <span className="text-[#f59e0b] font-bold">{roomCode}</span>
               </div>
               
-              {/* Compact Gear Button on Mobile (Icon only under 640px) */}
-              <button
-                onClick={() => setIsLockerRoomOpen(true)}
-                className="touch-manipulation p-2 sm:px-2.5 sm:py-1.5 min-w-[36px] sm:min-w-0 flex items-center justify-center gap-1 bg-[#d97706] hover:bg-[#b45309] text-white border-2 border-[#78350f] font-pixel text-[10px] sm:text-xs cursor-pointer shadow-[0_2px_0_0_#451a03] active:translate-y-0.5 active:shadow-none shrink-0"
-                title="Open Locker Room"
-              >
-                <Shirt size={15} />
-                <span className="hidden sm:inline">GEAR</span>
-              </button>
+              <div className="flex items-center gap-1 px-2 py-1 bg-[#12579b] border border-[#0a2d52] rounded-xs font-pixel text-[10px] sm:text-xs text-[#fae5b8] whitespace-nowrap">
+                <span className="text-[#38bdf8] hidden sm:inline">SCORE: </span>
+                <span>{userTotalPoints.toLocaleString()} PTS</span>
+              </div>
             </div>
 
           </div>
@@ -350,12 +429,15 @@ export default function App() {
             {currentTab === 'team' && (
               <MyTeamView
                 roster={roster}
-                user={user}
+                user={activeUser}
                 selectedPlayers={selectedPlayers}
+                userName={userName}
+                roomCode={roomCode}
+                onUserNameChange={handleUserNameChange}
+                onRoomCodeChange={handleRoomCodeChange}
                 onSelectSlot={handleSelectSlot}
                 onClearSlot={handleClearSlot}
                 onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
-                onOpenLockerRoom={() => setIsLockerRoomOpen(true)}
                 onOpenStatsModal={() => setCurrentTab('live')}
                 onTogglePlayer={handleTogglePlayer}
               />
@@ -372,9 +454,13 @@ export default function App() {
 
             {currentTab === 'leaderboard' && (
               <LeaderboardView
-                user={user}
-                friendsList={friendsList}
+                user={activeUser}
                 nflCompetitors={roster}
+                roomRosters={roomRosters}
+                roomCode={roomCode}
+                userName={userName}
+                onRoomCodeChange={handleRoomCodeChange}
+                onUserNameChange={handleUserNameChange}
                 onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
               />
             )}
@@ -419,7 +505,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <Database size={20} className="text-[#38bdf8]" />
                   <h2 className="font-pixel text-xs sm:text-sm text-[#fae5b8] tracking-wider uppercase">
-                    DEVELOPER & DATABASE ARCHITECTURE
+                    DEVELOPER &amp; DATABASE ARCHITECTURE
                   </h2>
                 </div>
                 <button
@@ -461,15 +547,6 @@ export default function App() {
               setDetailedPlayer(null);
             }}
             isSelectedForTeam={safeUserSelectedIds.includes(detailedPlayer.id)}
-          />
-        )}
-
-        {isLockerRoomOpen && (
-          <LockerRoomModal
-            currentAvatar={user.avatar}
-            userCoins={user.coins}
-            onSaveAvatar={handleSaveAvatar}
-            onClose={() => setIsLockerRoomOpen(false)}
           />
         )}
 

@@ -100,12 +100,11 @@ CREATE TABLE IF NOT EXISTS public.match_events (
 
 CREATE INDEX IF NOT EXISTS idx_match_events_competitor ON public.match_events(competitor_id);
 
--- 6. USER PROFILES & KIDS LOCKER ROOM
+-- 6. USER PROFILES
 CREATE TABLE IF NOT EXISTS public.user_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username TEXT NOT NULL UNIQUE,             -- e.g. 'PLAYER123', 'PIXELPRO'
-    coins INTEGER NOT NULL DEFAULT 98765,      -- Retro arcade coins for unlocking helmets
-    total_score INTEGER NOT NULL DEFAULT 14670,
+    total_score INTEGER NOT NULL DEFAULT 0,
     badges JSONB NOT NULL DEFAULT '["emerald_gem", "diamond_crystal"]'::jsonb,
     avatar_config JSONB NOT NULL DEFAULT '{
       "helmetColor": "#155e9e",
@@ -130,6 +129,22 @@ CREATE TABLE IF NOT EXISTS public.rosters (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_user_sport_period UNIQUE (user_id, sport_id, period_code)
 );
+
+-- 7b. MULTI-DEVICE SHARED FAMILY ROSTERS (Room Code System)
+CREATE TABLE IF NOT EXISTS public.user_rosters (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_code TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    star_1_id TEXT NOT NULL,
+    star_2_id TEXT NOT NULL,
+    star_3_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_user_rosters_room_user UNIQUE (room_code, user_name)
+);
+CREATE INDEX IF NOT EXISTS idx_user_rosters_room ON public.user_rosters(room_code);
+ALTER TABLE public.user_rosters ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read access on user_rosters" ON public.user_rosters FOR SELECT USING (true);
+CREATE POLICY "Allow public insert/update on user_rosters" ON public.user_rosters FOR ALL USING (true);
 
 -- 8. ROW LEVEL SECURITY (RLS) FOR SAFE KIDS APPLICATION
 ALTER TABLE public.sports ENABLE ROW LEVEL SECURITY;
@@ -476,17 +491,15 @@ ON CONFLICT (id) DO UPDATE SET
   rating = EXCLUDED.rating;
 
 -- 3. Insert user profile for PLAYER123
-INSERT INTO public.user_profiles (id, username, coins, total_score, badges, avatar_config)
+INSERT INTO public.user_profiles (id, username, total_score, badges, avatar_config)
 VALUES (
   'd0e5b720-3021-4d7a-8b1b-9f939e081111',
   'PLAYER123',
-  98765,
-  14670,
+  0,
   '["emerald_gem", "diamond_crystal"]'::jsonb,
   '{"helmetColor": "#155e9e", "jerseyColor": "#155e9e", "stripeColor": "#ffffff", "skinTone": "#d98c55", "number": 88}'::jsonb
 )
 ON CONFLICT (id) DO UPDATE SET
-  coins = EXCLUDED.coins,
   total_score = EXCLUDED.total_score;
 
 -- 4. Insert active 3-player lineup for PLAYER123:

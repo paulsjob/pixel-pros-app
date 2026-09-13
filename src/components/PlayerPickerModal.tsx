@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Competitor } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { X, Search, Check, Sparkles } from 'lucide-react';
+import { formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
 
 interface PlayerPickerModalProps {
   isOpen: boolean;
@@ -34,7 +35,8 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           p.displayName.toLowerCase().includes(q) ||
           p.shortName.toLowerCase().includes(q) ||
           p.teamName.toLowerCase().includes(q) ||
-          p.teamCode.toLowerCase().includes(q)
+          p.teamCode.toLowerCase().includes(q) ||
+          (p.position && p.position.toLowerCase().includes(q))
       )
       .sort((a, b) => (b.score || 0) - (a.score || 0));
   }, [allPlayers, searchQuery]);
@@ -60,13 +62,13 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
         <div className="text-center pb-2.5 sm:pb-3 border-b-2 border-[#d4a86a] shrink-0">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-xs sm:text-sm border border-[#0a2d52] shadow-[0_2px_0_0_#051a30] mb-1.5">
             <Sparkles size={14} className="text-[#fde047]" />
-            <span>PICK STAR {slotIndex + 1}</span>
+            <span>SELECT STAR {slotIndex + 1}</span>
           </div>
           <h2 className="font-pixel text-sm sm:text-base text-[#5c3509] tracking-wider uppercase">
-            CHOOSE ANY NFL STAR
+            CHOOSE ACTIVE NFL STAR
           </h2>
           <p className="font-retro text-[10px] sm:text-[11px] text-[#784610] mt-0.5">
-            Pick ANY real athlete from the database — no position restrictions!
+            Hydrated live from Supabase competitors table (no position limits)
           </p>
         </div>
 
@@ -78,7 +80,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search NFL stars (e.g. Mahomes, Allen, KC, BUF)..."
+              placeholder="Search NFL stars (Mahomes, Allen, Henry, Lamb, SEA)..."
               className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-[#ebd2a4] border-2 border-[#c99a57] text-[#5c3509] font-retro text-xs rounded-xs placeholder:text-[#8c735d] focus:outline-hidden focus:border-[#12579b] focus:bg-[#fae9c8]"
             />
             {searchQuery && (
@@ -102,6 +104,8 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
             filteredPlayers.map((player) => {
               const isCurrentSlot = player.id === currentSlotPlayerId;
               const isOtherSlot = !isCurrentSlot && selectedPlayerIds.includes(player.id);
+              const formattedName = formatPlayerInitialLastName(player.displayName);
+              const teamPosSubtitle = formatTeamPosSubtitle(player.teamCode, player.position || player.positionGeneric);
 
               return (
                 <div
@@ -116,7 +120,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                       : 'bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-[#c99a57]'
                   }`}
                 >
-                  {/* Left Column: Sprite + Name + Team Abbr */}
+                  {/* Left Column: Sprite + Name + Team Abbr + Position */}
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                     {/* 8-bit Sprite */}
                     <div className="shrink-0">
@@ -135,7 +139,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                             isCurrentSlot ? 'text-[#fae5b8]' : 'text-[#5c3509]'
                           }`}
                         >
-                          {player.displayName}
+                          {formattedName}
                         </span>
                         {/* 3-Letter Team Abbreviation Badge */}
                         <span
@@ -146,6 +150,16 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                           }`}
                         >
                           {player.teamCode}
+                        </span>
+                        {/* Real Position Badge */}
+                        <span
+                          className={`px-1.5 py-0.5 font-pixel text-[9px] border rounded-xs shrink-0 ${
+                            isCurrentSlot
+                              ? 'bg-[#0a2d52] text-[#38bdf8] border-[#38bdf8]/40'
+                              : 'bg-[#fae9c8] text-[#784610] border-[#d4a86a]'
+                          }`}
+                        >
+                          {player.position || player.positionGeneric || 'STAR'}
                         </span>
                       </div>
                       <div
@@ -158,35 +172,27 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Right Column: Score Badge + Action */}
+                  {/* Right Column: Score Badge + Action (flex-shrink-0 and whitespace-nowrap) */}
                   <div className="flex items-center gap-2 shrink-0">
                     <div
-                      className={`px-2 py-1 font-pixel text-[11px] sm:text-xs font-bold border rounded-xs shadow-xs whitespace-nowrap ${
+                      className={`px-2 py-1 font-pixel text-[11px] sm:text-xs font-bold border rounded-xs shadow-xs whitespace-nowrap shrink-0 ${
                         isCurrentSlot
                           ? 'bg-[#38bdf8] text-[#080d1a] border-[#0284c7]'
                           : 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52]'
                       }`}
                     >
-                      {player.score.toLocaleString()} PTS
+                      {player.score ? `${player.score.toLocaleString()} PTS` : '0 PTS'}
                     </div>
 
                     <button
                       type="button"
-                      className={`px-2 py-1 font-pixel text-[9px] sm:text-[10px] border rounded-xs whitespace-nowrap cursor-pointer transition-all ${
+                      className={`px-2 py-1 font-pixel text-[9px] sm:text-[10px] border rounded-xs whitespace-nowrap shrink-0 cursor-pointer transition-all ${
                         isCurrentSlot
                           ? 'bg-[#166534] text-[#fae5b8] border-[#14532d]'
                           : 'bg-[#fae5b8] hover:bg-white text-[#5c3509] border-[#c99a57]'
                       }`}
                     >
-                      {isCurrentSlot ? (
-                        <span className="flex items-center gap-1">
-                          <Check size={10} /> PICKED
-                        </span>
-                      ) : isOtherSlot ? (
-                        'SWAP'
-                      ) : (
-                        '+ SELECT'
-                      )}
+                      {isCurrentSlot ? 'CURRENT' : isOtherSlot ? 'SWAP' : 'PICK'}
                     </button>
                   </div>
                 </div>
@@ -195,15 +201,10 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="pt-2.5 mt-2 border-t border-[#d4a86a] flex justify-between items-center text-[10px] font-retro text-[#784610] shrink-0">
-          <span>{filteredPlayers.length} Genuine NFL Stars</span>
-          <button
-            onClick={onClose}
-            className="font-pixel text-[10px] text-[#12579b] hover:underline cursor-pointer"
-          >
-            CANCEL
-          </button>
+        {/* Footer helper */}
+        <div className="mt-3 pt-2 border-t border-[#d4a86a] flex items-center justify-between text-[10px] font-retro text-[#784610] shrink-0">
+          <span>{filteredPlayers.length} NFL Stars Available</span>
+          <span>Tap to pick into STAR {slotIndex + 1}</span>
         </div>
 
       </div>

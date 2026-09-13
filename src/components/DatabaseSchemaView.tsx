@@ -123,10 +123,16 @@ export const DatabaseSchemaView: React.FC = () => {
       desc: 'Directly powers the "Select 3 Players for This Week" slots displayed in the My Team interface.',
     },
     {
+      name: 'user_rosters',
+      purpose: 'Multi-Device Shared Family Rosters (Room Code System)',
+      columns: 'id (UUID), room_code (TEXT), user_name (TEXT), star_1_id (TEXT), star_2_id (TEXT), star_3_id (TEXT), updated_at',
+      desc: 'Powers real-time household rosters across multiple phones, iPads, and computers linked to a shared room code.',
+    },
+    {
       name: 'user_profiles',
-      purpose: 'Kids & Family Player Accounts',
-      columns: 'id (UUID), username, coins (INT), total_score (INT), badges (JSONB), avatar_config (JSONB)',
-      desc: 'Holds arcade coins (e.g. 98,765), earned gem badges, and custom pixel helmet gear.',
+      purpose: 'Family Player Profiles',
+      columns: 'id (UUID), username, total_score (INT), badges (JSONB), avatar_config (JSONB)',
+      desc: 'Holds total score, earned gem badges, and custom pixel helmet gear.',
     },
     {
       name: 'scoring_rules',

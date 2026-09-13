@@ -24,7 +24,8 @@ export interface Competitor {
   uniformNumber: number;
   teamName: string;
   teamCode: string;
-  positionGeneric: 'OFFENSE' | 'DEFENSE' | 'SCORER' | 'PLAYMAKER';
+  positionGeneric: 'OFFENSE' | 'DEFENSE' | 'SCORER' | 'PLAYMAKER' | string;
+  position?: string;
   rating: number;
   stats: {
     passingYards: number;
@@ -69,13 +70,23 @@ export interface LeaderboardEntry {
   isYou: boolean;
   avatar: AvatarConfig;
   badges?: string[];
+  rosterPlayerIds?: string[];
 }
 
 export interface UserProfile {
   username: string;
-  coins: number;
   totalScore: number;
   badges: string[];
   avatar: AvatarConfig;
   selectedPlayerIds: string[];
+}
+
+export interface UserRoster {
+  id?: string;
+  room_code: string;
+  user_name: string;
+  star_1_id: string;
+  star_2_id: string;
+  star_3_id: string;
+  updated_at?: string;
 }

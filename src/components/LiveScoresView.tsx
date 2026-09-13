@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Competitor, Match } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { Activity, Flame, ChevronDown, ChevronUp, Wrench, Trophy } from 'lucide-react';
+import { formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
 
 interface LiveScoresViewProps {
   matches: Match[];
@@ -12,31 +13,67 @@ interface LiveScoresViewProps {
 
 // Utility to ensure standard 3-letter retro ticker abbreviation
 export function getTeamAbbr(team: string): string {
-  if (!team) return 'TEAM';
+  if (!team) return 'NFL';
   const clean = team.trim().toUpperCase();
   const knownMap: Record<string, string> = {
     'KANSAS CITY': 'KC',
-    'KANSAS': 'KC',
-    'KC KINGDOM': 'KC',
+    'KANSAS CITY CHIEFS': 'KC',
+    'CHIEFS': 'KC',
     'KC': 'KC',
     'BUFFALO': 'BUF',
-    'BUFFALO RUSH': 'BUF',
+    'BUFFALO BILLS': 'BUF',
+    'BILLS': 'BUF',
     'BUF': 'BUF',
     'BALTIMORE': 'BAL',
-    'BALTIMORE POWER': 'BAL',
+    'BALTIMORE RAVENS': 'BAL',
+    'RAVENS': 'BAL',
     'BAL': 'BAL',
     'DALLAS': 'DAL',
-    'BLUE STARS': 'DAL',
+    'DALLAS COWBOYS': 'DAL',
+    'COWBOYS': 'DAL',
     'DAL': 'DAL',
-    'MIAMI': 'MIA',
-    'MIAMI SPEED': 'MIA',
-    'MIAMI UNITED': 'MIA',
-    'MIA': 'MIA',
-    'GOLDEN STATE': 'GSW',
-    'GSW': 'GSW',
+    'SAN FRANCISCO': 'SF',
+    'SAN FRANCISCO 49ERS': 'SF',
+    '49ERS': 'SF',
+    'SF': 'SF',
+    'PHILADELPHIA': 'PHI',
+    'PHILADELPHIA EAGLES': 'PHI',
+    'EAGLES': 'PHI',
+    'PHI': 'PHI',
     'SEATTLE': 'SEA',
-    'BAY HAWKS': 'SEA',
+    'SEATTLE SEAHAWKS': 'SEA',
+    'SEAHAWKS': 'SEA',
     'SEA': 'SEA',
+    'MIAMI': 'MIA',
+    'MIAMI DOLPHINS': 'MIA',
+    'DOLPHINS': 'MIA',
+    'MIA': 'MIA',
+    'MINNESOTA': 'MIN',
+    'MINNESOTA VIKINGS': 'MIN',
+    'VIKINGS': 'MIN',
+    'MIN': 'MIN',
+    'DETROIT': 'DET',
+    'DETROIT LIONS': 'DET',
+    'LIONS': 'DET',
+    'DET': 'DET',
+    'CINCINNATI': 'CIN',
+    'CINCINNATI BENGALS': 'CIN',
+    'BENGALS': 'CIN',
+    'CIN': 'CIN',
+    'LOS ANGELES RAMS': 'LAR',
+    'RAMS': 'LAR',
+    'LAR': 'LAR',
+    'HOUSTON': 'HOU',
+    'HOUSTON TEXANS': 'HOU',
+    'TEXANS': 'HOU',
+    'HOU': 'HOU',
+    'PITTSBURGH': 'PIT',
+    'PITTSBURGH STEELERS': 'PIT',
+    'STEELERS': 'PIT',
+    'PIT': 'PIT',
+    'GREEN BAY': 'GB',
+    'PACKERS': 'GB',
+    'GB': 'GB',
   };
   if (knownMap[clean]) return knownMap[clean];
   if (clean.length <= 4) return clean;
@@ -55,9 +92,12 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
 }) => {
   const [showDevTools, setShowDevTools] = useState(false);
 
-  // Automatically sort competitors descending by SCORE (highest score at top)
+  // Automatically sort competitors descending by SCORE limit 20
   const safeCompetitors = Array.isArray(competitors) ? [...competitors] : [];
-  const sortedCompetitors = safeCompetitors.sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0));
+  const sortedCompetitors = safeCompetitors
+    .slice()
+    .sort((a, b) => (b?.score ?? 0) - (a?.score ?? 0))
+    .slice(0, 20);
   const safeMatches = Array.isArray(matches) ? matches : [];
 
   return (
@@ -80,11 +120,11 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
             LIVE MATCHES & STATS
           </h2>
           <div className="font-pixel text-[10px] sm:text-xs text-[#12579b] mt-1 tracking-widest">
-            WEEK 1 • LIVE FEED
+            WEEK 1 • SUPABASE REALTIME WIRE
           </div>
         </div>
 
-        {/* 1. Live Games Section: 3-Letter Team Abbreviations ONLY */}
+        {/* 1. Live Games Section: Connected 100% to Supabase Matches Table */}
         <div className="w-full box-border">
           <div className="flex items-center justify-between pb-2 mb-2 sm:mb-3">
             <div className="flex items-center gap-2">
@@ -98,62 +138,83 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full box-border">
-            {safeMatches.map((match) => {
-              const homeCode = match.homeTeamCode || getTeamAbbr(match.homeTeam);
-              const awayCode = match.awayTeamCode || getTeamAbbr(match.awayTeam);
+          {safeMatches.length === 0 ? (
+            <div className="w-full p-4 sm:p-6 bg-[#ebd2a4] border-3 border-[#c99a57] rounded-xs text-center space-y-1">
+              <div className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase">
+                NO LIVE GAMES IN PROGRESS
+              </div>
+              <div className="font-retro text-[11px] sm:text-xs text-[#784610]">
+                Upcoming NFL games will appear dynamically as they kick off via Supabase Realtime.
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 w-full box-border">
+              {safeMatches.map((match) => {
+                const isLive = match.status === 'live';
+                const isScheduled = match.status === 'upcoming';
+                const homeCode = match.homeTeamCode || getTeamAbbr(match.homeTeam);
+                const awayCode = match.awayTeamCode || getTeamAbbr(match.awayTeam);
 
-              return (
-                <div
-                  key={match.id}
-                  className="w-full box-border bg-[#ebd2a4] border-3 border-[#c99a57] p-3 sm:p-4 rounded-xs shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] flex flex-col justify-between"
-                >
-                  {/* Status Header */}
-                  <div className="flex items-center justify-between font-retro text-xs text-[#784610] mb-2">
-                    <span className="flex items-center gap-1.5 font-pixel text-[10px] text-[#b91c1c] font-bold">
-                      <span className="w-2 h-2 rounded-full bg-[#b91c1c] inline-block animate-pulse" />
-                      {match.status.toUpperCase()}
-                    </span>
-                    <span className="font-pixel text-[10px] bg-[#fae9c8] px-2 py-0.5 border border-[#d4a86a] text-[#5c3509]">
-                      {match.periodLabel}
-                    </span>
-                  </div>
-
-                  {/* 3-Letter Team Abbreviations with Centered Score Badge ("KC 21 - 17 BUF") */}
-                  <div className="flex items-center justify-between gap-2 py-2 px-1 w-full box-border">
-                    {/* Home Team 3-letter Abbr */}
-                    <div className="w-14 sm:w-16 text-center shrink-0">
-                      <span className="font-pixel text-base sm:text-lg text-[#5c3509] tracking-wider font-bold">
-                        {homeCode}
+                return (
+                  <div
+                    key={match.id}
+                    className="w-full box-border bg-[#ebd2a4] border-3 border-[#c99a57] p-3 sm:p-4 rounded-xs shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] flex flex-col justify-between"
+                  >
+                    {/* Status Header */}
+                    <div className="flex items-center justify-between font-retro text-xs text-[#784610] mb-2">
+                      <span className={`flex items-center gap-1.5 font-pixel text-[10px] font-bold ${
+                        isLive ? 'text-[#b91c1c]' : 'text-[#12579b]'
+                      }`}>
+                        {isLive && <span className="w-2 h-2 rounded-full bg-[#b91c1c] inline-block animate-pulse" />}
+                        {isScheduled ? 'SCHEDULED' : match.status.toUpperCase()}
+                      </span>
+                      <span className="font-pixel text-[10px] bg-[#fae9c8] px-2 py-0.5 border border-[#d4a86a] text-[#5c3509]">
+                        {match.periodLabel}
                       </span>
                     </div>
 
-                    {/* Centered Score Badge with Ample Padding */}
-                    <div className="flex-1 flex justify-center items-center px-1">
-                      <div className="px-3 sm:px-4 py-1.5 bg-[#fae9c8] border-2 border-[#12579b] shadow-[0_2px_0_0_#0a2d52] rounded-xs font-pixel text-xs sm:text-sm text-[#12579b] tracking-widest font-bold whitespace-nowrap">
-                        {match.homeScore} - {match.awayScore}
+                    {/* 3-Letter Team Abbreviations with Centered Kickoff / Score Badge */}
+                    <div className="flex items-center justify-between gap-2 py-2 px-1 w-full box-border">
+                      {/* Home Team 3-letter Abbr */}
+                      <div className="w-14 sm:w-16 text-center shrink-0">
+                        <span className="font-pixel text-base sm:text-lg text-[#5c3509] tracking-wider font-bold">
+                          {homeCode}
+                        </span>
+                      </div>
+
+                      {/* Centered Display: Real Kickoff Time for Scheduled, Scores for Live/Final */}
+                      <div className="flex-1 flex justify-center items-center px-1">
+                        {isScheduled ? (
+                          <div className="px-2.5 sm:px-3.5 py-1.5 bg-[#fae9c8] border-2 border-[#c99a57] rounded-xs font-pixel text-[10px] sm:text-xs text-[#5c3509] tracking-wider font-bold whitespace-nowrap shadow-xs">
+                            {match.periodLabel || '1:00 PM EDT'}
+                          </div>
+                        ) : (
+                          <div className="px-3 sm:px-4 py-1.5 bg-[#fae9c8] border-2 border-[#12579b] shadow-[0_2px_0_0_#0a2d52] rounded-xs font-pixel text-xs sm:text-sm text-[#12579b] tracking-widest font-bold whitespace-nowrap">
+                            {match.homeScore} - {match.awayScore}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Away Team 3-letter Abbr */}
+                      <div className="w-14 sm:w-16 text-center shrink-0">
+                        <span className="font-pixel text-base sm:text-lg text-[#5c3509] tracking-wider font-bold">
+                          {awayCode}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Away Team 3-letter Abbr */}
-                    <div className="w-14 sm:w-16 text-center shrink-0">
-                      <span className="font-pixel text-base sm:text-lg text-[#5c3509] tracking-wider font-bold">
-                        {awayCode}
-                      </span>
-                    </div>
+                    {/* Live Play Event */}
+                    {match.recentEvent && (
+                      <div className="mt-2.5 text-xs font-retro text-[#78350f] bg-[#fae9c8] p-2 border border-[#d4a86a] rounded-xs flex items-center gap-2">
+                        <Flame size={14} className="text-[#d97706] shrink-0" />
+                        <span className="leading-tight text-[11px] sm:text-xs truncate">{match.recentEvent}</span>
+                      </div>
+                    )}
                   </div>
-
-                  {/* Live Play Event */}
-                  {match.recentEvent && (
-                    <div className="mt-2.5 text-xs font-retro text-[#78350f] bg-[#fae9c8] p-2 border border-[#d4a86a] rounded-xs flex items-center gap-2">
-                      <Flame size={14} className="text-[#d97706] shrink-0" />
-                      <span className="leading-tight text-[11px] sm:text-xs truncate">{match.recentEvent}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 2. Standings Section: Strictly single-line header on any mobile screen */}
@@ -166,7 +227,7 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
               </h3>
             </div>
             <span className="font-pixel text-[10px] sm:text-xs text-[#784610] bg-[#fae9c8] px-2 sm:px-2.5 py-0.5 border border-[#d4a86a] rounded-xs whitespace-nowrap shrink-0">
-              TOP SCORES
+              TOP 20 SCORES
             </span>
           </div>
 
@@ -184,14 +245,14 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                   const rank = index + 1;
                   const isTopThree = rank <= 3;
                   const teamAbbr = player.teamCode || getTeamAbbr(player.teamName);
+                  const formattedName = formatPlayerInitialLastName(player.displayName);
+                  const teamPosSubtitle = formatTeamPosSubtitle(teamAbbr, player.position || player.positionGeneric);
 
                   return (
                     <tr
                       key={player.id}
                       onClick={() => onSelectPlayer && onSelectPlayer(player)}
-                      className={`hover:bg-[#fae9c8] cursor-pointer transition-colors ${
-                        player.displayName === 'Jeerice Henry' ? 'bg-[#fae5b8]' : ''
-                      }`}
+                      className="hover:bg-[#fae9c8] cursor-pointer transition-colors"
                     >
                       {/* Column 1: PLAYER (Takes remaining space, flex-1 min-w-0 pr-2, truncate player name) */}
                       <td className="py-2 sm:py-2.5 px-2 sm:px-3 min-w-0 pr-2">
@@ -220,13 +281,13 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
                             />
                           </div>
 
-                          {/* Player Name + Team Abbreviation directly under/next to the name */}
+                          {/* Player Name ("P. Mahomes") + Subtitle ("[TEAM] · [POS]") */}
                           <div className="min-w-0 flex-1">
                             <span className="font-pixel text-[11px] sm:text-xs text-[#5c3509] block leading-tight truncate">
-                              {player.displayName}
+                              {formattedName}
                             </span>
                             <span className="text-[10px] text-[#784610] font-retro block leading-tight truncate mt-0.5">
-                              {teamAbbr} • #{player.uniformNumber} {player.positionGeneric ? `• ${player.positionGeneric}` : ''}
+                              {teamPosSubtitle} • #{player.uniformNumber}
                             </span>
                           </div>
                         </div>
@@ -252,94 +313,58 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
           </div>
         </div>
 
-      </div>
-
-      {/* 3. Demoted Developer Testing (Collapsed at very bottom) */}
-      {onSimulatePlay && (
-        <div className="pt-2 w-full box-border">
-          <div className="border border-[#334155] rounded-xs bg-[#0f172a]/70 p-3 box-border">
+        {/* Developer Sandbox Drawer for Simulating Scoring Plays */}
+        {onSimulatePlay && (
+          <div className="pt-2 border-t border-[#d4a86a]/60">
             <button
               onClick={() => setShowDevTools(!showDevTools)}
-              className="touch-manipulation w-full flex items-center justify-between text-left font-retro text-xs text-[#94a3b8] hover:text-[#fae5b8] transition-colors cursor-pointer"
+              className="touch-manipulation text-[11px] font-pixel text-[#784610] hover:text-[#5c3509] flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <span className="flex items-center gap-2">
-                <Wrench size={14} />
-                <span>Developer Testing & Play Simulator (Optional)</span>
-              </span>
-              {showDevTools ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              <Wrench size={13} />
+              <span>TEST LIVE SCORING TRIGGERS</span>
+              {showDevTools ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
 
             {showDevTools && (
-              <div className="mt-3 pt-3 border-t border-[#1e293b] animate-in fade-in duration-100">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-retro text-[#94a3b8]">
-                    Simulate Python Poller Push & Realtime Wire (Zero Page Reload):
-                  </p>
-                  <span className="text-[10px] font-pixel text-[#38bdf8]">
-                    30-60s DAEMON ENGINE
-                  </span>
+              <div className="mt-3 p-3 bg-[#ebd2a4] border-2 border-[#c99a57] rounded-xs space-y-2">
+                <div className="text-[10px] font-retro text-[#784610]">
+                  Tap a trigger to simulate a real-time event write:
                 </div>
-                
-                {/* Scoring Rule Quick-Simulators */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-3">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => {
-                      const p = sortedCompetitors[0];
-                      if (p) onSimulatePlay(p, 'Touchdown', 6);
+                      const p = sortedCompetitors[0] || competitors[0];
+                      if (p) onSimulatePlay(p, 'TOUCHDOWN PASS (+6 PTS)', 6);
                     }}
-                    className="touch-manipulation px-2 py-1.5 bg-[#166534]/60 hover:bg-[#166534] text-[#86efac] font-pixel text-[10px] border border-[#22c55e]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                    className="touch-manipulation px-2.5 py-1.5 bg-[#16a34a] hover:bg-[#15803d] text-white font-pixel text-[10px] rounded-xs border border-[#14532d] cursor-pointer active:translate-y-0.5"
                   >
-                    +6 TD (Touchdown)
+                    +6 TD PLAY
                   </button>
                   <button
                     onClick={() => {
-                      const p = sortedCompetitors[1] || sortedCompetitors[0];
-                      if (p) onSimulatePlay(p, 'Field Goal', 3);
+                      const p = sortedCompetitors[1] || competitors[0];
+                      if (p) onSimulatePlay(p, '50+ YARDS DRIVE (+1 PT)', 1);
                     }}
-                    className="touch-manipulation px-2 py-1.5 bg-[#854d0e]/60 hover:bg-[#854d0e] text-[#fde047] font-pixel text-[10px] border border-[#eab308]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                    className="touch-manipulation px-2.5 py-1.5 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-pixel text-[10px] rounded-xs border border-[#1e40af] cursor-pointer active:translate-y-0.5"
                   >
-                    +3 FG (Field Goal)
+                    +1 50-YD PLAY
                   </button>
                   <button
                     onClick={() => {
-                      const p = sortedCompetitors.find(c => c.positionGeneric === 'DEFENSE') || sortedCompetitors[2];
-                      if (p) onSimulatePlay(p, 'Big Defense Stop', 2);
+                      const p = sortedCompetitors[2] || competitors[0];
+                      if (p) onSimulatePlay(p, '48 YD FIELD GOAL (+3 PTS)', 3);
                     }}
-                    className="touch-manipulation px-2 py-1.5 bg-[#1e40af]/60 hover:bg-[#1e40af] text-[#93c5fd] font-pixel text-[10px] border border-[#3b82f6]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                    className="touch-manipulation px-2.5 py-1.5 bg-[#ca8a04] hover:bg-[#a16207] text-white font-pixel text-[10px] rounded-xs border border-[#713f12] cursor-pointer active:translate-y-0.5"
                   >
-                    +2 DEF (Big Stop)
+                    +3 FIELD GOAL
                   </button>
-                  <button
-                    onClick={() => {
-                      const p = sortedCompetitors[0];
-                      if (p) onSimulatePlay(p, '50 Passing Yards', 1);
-                    }}
-                    className="touch-manipulation px-2 py-1.5 bg-[#374151]/60 hover:bg-[#374151] text-[#d1d5db] font-pixel text-[10px] border border-[#6b7280]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
-                  >
-                    +1 YDS (Every 50 Yds)
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {sortedCompetitors.slice(0, 5).map((player) => (
-                    <button
-                      key={player.id}
-                      onClick={() => onSimulatePlay(player, 'Touchdown', 6)}
-                      className="touch-manipulation px-2 py-1 bg-[#1e293b] hover:bg-[#334155] text-[#fae5b8] font-pixel text-[10px] border border-[#475569] rounded-xs transition-all active:translate-y-0.5 cursor-pointer"
-                    >
-                      +6 TD: {player.shortName}
-                    </button>
-                  ))}
                 </div>
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
 
+      </div>
     </div>
   );
 };
-
-// Export alias for consistency
-export const LiveMatchesView = LiveScoresView;

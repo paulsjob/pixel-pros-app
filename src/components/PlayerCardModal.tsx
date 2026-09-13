@@ -92,7 +92,7 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
                 SCORE
               </span>
               <div className="font-pixel text-2xl sm:text-3xl text-[#5c3509] tracking-wider font-bold my-1">
-                {player.score.toLocaleString()}
+                {player.score ? player.score.toLocaleString() : '0'} PTS
               </div>
               <div className="text-[10px] sm:text-[11px] font-retro text-[#784610] px-2.5 py-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs whitespace-nowrap">
                 WHOLE NUMBER PTS
