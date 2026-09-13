@@ -33,13 +33,18 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           <X size={18} strokeWidth={3} />
         </button>
 
-        {/* Title: PLAYER123 / Player Name */}
+        {/* Title: Player Name */}
         <div className="text-center mb-4 sm:mb-5 pb-3 border-b-3 border-[#e2ba7d]">
           <h2 className="font-pixel text-xl sm:text-2xl text-[#5c3509] tracking-wider uppercase">
-            {player.displayName === 'Jeerice Henry' ? 'PLAYER123' : player.displayName}
+            {player.displayName}
           </h2>
-          <div className="text-[11px] font-retro text-[#8c5211] mt-1">
-            {player.teamName} • #{player.uniformNumber} • {player.positionGeneric}
+          <div className="text-[11px] font-retro text-[#8c5211] mt-1 flex items-center justify-center gap-2">
+            <span className="px-1.5 py-0.5 bg-[#fae9c8] border border-[#d4a86a] text-[#12579b] font-pixel text-[9px] font-bold rounded-2xs">
+              {player.teamCode}
+            </span>
+            <span>{player.teamName}</span>
+            <span>•</span>
+            <span>#{player.uniformNumber}</span>
           </div>
         </div>
 
@@ -128,7 +133,7 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
                   : 'bg-[#12579b] text-[#fae5b8] shadow-[0_4px_0_0_#051a30] hover:bg-[#186abb]'
               }`}
             >
-              {isSelectedForTeam ? 'REMOVE FROM TEAM' : '+ ADD TO MY 3 PLAYERS'}
+              {isSelectedForTeam ? 'REMOVE FROM 3 STARS' : '+ PICK AS A STAR'}
             </button>
           </div>
         )}

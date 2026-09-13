@@ -271,15 +271,61 @@ export const LiveScoresView: React.FC<LiveScoresViewProps> = ({
 
             {showDevTools && (
               <div className="mt-3 pt-3 border-t border-[#1e293b] animate-in fade-in duration-100">
-                <p className="text-[11px] font-retro text-[#94a3b8] mb-2.5">
-                  Simulate live scoring events for testing points sync:
-                </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-retro text-[#94a3b8]">
+                    Simulate Python Poller Push & Realtime Wire (Zero Page Reload):
+                  </p>
+                  <span className="text-[10px] font-pixel text-[#38bdf8]">
+                    30-60s DAEMON ENGINE
+                  </span>
+                </div>
+                
+                {/* Scoring Rule Quick-Simulators */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-3">
+                  <button
+                    onClick={() => {
+                      const p = sortedCompetitors[0];
+                      if (p) onSimulatePlay(p, 'Touchdown', 6);
+                    }}
+                    className="touch-manipulation px-2 py-1.5 bg-[#166534]/60 hover:bg-[#166534] text-[#86efac] font-pixel text-[10px] border border-[#22c55e]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                  >
+                    +6 TD (Touchdown)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const p = sortedCompetitors[1] || sortedCompetitors[0];
+                      if (p) onSimulatePlay(p, 'Field Goal', 3);
+                    }}
+                    className="touch-manipulation px-2 py-1.5 bg-[#854d0e]/60 hover:bg-[#854d0e] text-[#fde047] font-pixel text-[10px] border border-[#eab308]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                  >
+                    +3 FG (Field Goal)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const p = sortedCompetitors.find(c => c.positionGeneric === 'DEFENSE') || sortedCompetitors[2];
+                      if (p) onSimulatePlay(p, 'Big Defense Stop', 2);
+                    }}
+                    className="touch-manipulation px-2 py-1.5 bg-[#1e40af]/60 hover:bg-[#1e40af] text-[#93c5fd] font-pixel text-[10px] border border-[#3b82f6]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                  >
+                    +2 DEF (Big Stop)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const p = sortedCompetitors[0];
+                      if (p) onSimulatePlay(p, '50 Passing Yards', 1);
+                    }}
+                    className="touch-manipulation px-2 py-1.5 bg-[#374151]/60 hover:bg-[#374151] text-[#d1d5db] font-pixel text-[10px] border border-[#6b7280]/50 rounded-xs text-center cursor-pointer transition-all active:translate-y-0.5"
+                  >
+                    +1 YDS (Every 50 Yds)
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
                   {sortedCompetitors.slice(0, 5).map((player) => (
                     <button
                       key={player.id}
                       onClick={() => onSimulatePlay(player, 'Touchdown', 6)}
-                      className="touch-manipulation px-2.5 py-1.5 bg-[#1e293b] hover:bg-[#334155] text-[#fae5b8] font-pixel text-[10px] border border-[#475569] rounded-xs transition-all active:translate-y-0.5 cursor-pointer"
+                      className="touch-manipulation px-2 py-1 bg-[#1e293b] hover:bg-[#334155] text-[#fae5b8] font-pixel text-[10px] border border-[#475569] rounded-xs transition-all active:translate-y-0.5 cursor-pointer"
                     >
                       +6 TD: {player.shortName}
                     </button>

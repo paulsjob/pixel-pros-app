@@ -9,6 +9,10 @@ import {
   NEXTJS_HOOK_CODE,
   NEXTJS_SUPABASE_CLIENT_CODE,
   NEXTJS_SUPABASE_SERVER_CODE,
+  NEXTJS_REALTIME_HOOK_CODE,
+  GITHUB_ACTION_WORKFLOW_CODE,
+  DOCKER_WORKER_CODE,
+  SYSTEMD_SERVICE_CODE,
 } from '../data/schemaSql';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -24,6 +28,9 @@ import {
   Play,
   Server,
   FileCode,
+  Radio,
+  Clock,
+  Cpu,
 } from 'lucide-react';
 
 export const DatabaseSchemaView: React.FC = () => {
@@ -31,6 +38,7 @@ export const DatabaseSchemaView: React.FC = () => {
     'nextjs' | 'dummy_seed' | 'env_security' | 'sql' | 'tables' | 'python' | 'live_test'
   >('nextjs');
   const [nextSubTab, setNextSubTab] = useState<'page' | 'hook' | 'lib'>('page');
+  const [pythonSubTab, setPythonSubTab] = useState<'script' | 'realtime' | 'github' | 'docker' | 'systemd'>('script');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Live test state
@@ -170,7 +178,7 @@ export const DatabaseSchemaView: React.FC = () => {
             { id: 'live_test', label: '4. LIVE SUPABASE TESTER', icon: Play },
             { id: 'sql', label: '5. FULL POSTGRES SCHEMA', icon: Code2 },
             { id: 'tables', label: '6. TABLE SCHEMAS', icon: Layers },
-            { id: 'python', label: '7. PYTHON INGESTOR', icon: Sparkles },
+            { id: 'python', label: '7. PYTHON POLLER & DEPLOYMENT', icon: Sparkles },
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -511,22 +519,149 @@ export const DatabaseSchemaView: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 7: PYTHON INGESTOR */}
+      {/* Tab 7: PYTHON POLLER & DEPLOYMENT RUNNERS */}
       {activeTab === 'python' && (
-        <div className="pixel-box-cream p-5 rounded-xs">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-pixel text-xs text-[#5c3509]">
-              PYTHON WORKER: LIVE STATS NORMALIZER TO SUPABASE (ingestor.py)
-            </span>
-            <button
-              onClick={() => handleCopy(PYTHON_INGESTOR_CODE, 'py_ingest')}
-              className="text-xs font-retro text-[#12579b] hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <Copy size={12} /> Copy Python Code
-            </button>
-          </div>
-          <div className="bg-[#0d1321] text-[#7dd3fc] p-4 rounded border-2 border-[#1a2238] font-mono text-xs overflow-x-auto max-h-[500px]">
-            <pre className="whitespace-pre">{PYTHON_INGESTOR_CODE}</pre>
+        <div className="space-y-4">
+          <div className="pixel-box-cream p-5 rounded-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#d4a86a] pb-3 mb-4">
+              <div>
+                <h2 className="font-pixel text-sm text-[#5c3509]">
+                  LIGHTWEIGHT BACKGROUND POLLER & REALTIME WIRE
+                </h2>
+                <p className="font-retro text-xs text-[#784610] mt-0.5">
+                  Polls live stats every 30-60s, calculates whole-number points (TD: +6, FG: +3, Def: +2, 50Yds: +1), and pushes to Supabase.
+                </p>
+              </div>
+
+              {/* Subtabs */}
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: 'script', label: '1. scripts/poller.py', icon: Sparkles },
+                  { id: 'realtime', label: '2. Next.js Realtime Wire', icon: Radio },
+                  { id: 'github', label: '3. GitHub Actions (Cron)', icon: Clock },
+                  { id: 'docker', label: '4. Docker / $5 Droplet', icon: Server },
+                  { id: 'systemd', label: '5. systemd Service', icon: Cpu },
+                ].map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setPythonSubTab(sub.id as any)}
+                    className={`px-2 py-1 font-pixel text-[10px] border-2 cursor-pointer transition-all flex items-center gap-1 ${
+                      pythonSubTab === sub.id
+                        ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52]'
+                        : 'bg-[#ebd2a4] text-[#5c3509] border-[#c99a57] hover:bg-[#fae9c8]'
+                    }`}
+                  >
+                    <sub.icon size={11} />
+                    <span>{sub.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Subtab 1: poller.py */}
+            {pythonSubTab === 'script' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-retro text-xs text-[#12579b] font-bold">
+                    // Lightweight background poller script (calculates whole-number points & pushes to Supabase)
+                  </span>
+                  <button
+                    onClick={() => handleCopy(PYTHON_INGESTOR_CODE, 'py_script')}
+                    className="flex items-center gap-1 text-xs font-retro text-[#12579b] hover:underline cursor-pointer"
+                  >
+                    {copiedKey === 'py_script' ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                    <span>Copy poller.py</span>
+                  </button>
+                </div>
+                <div className="bg-[#0d1321] text-[#7dd3fc] p-4 rounded border-2 border-[#1a2238] font-mono text-xs overflow-x-auto max-h-[500px]">
+                  <pre className="whitespace-pre">{PYTHON_INGESTOR_CODE}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* Subtab 2: Next.js Realtime Hook */}
+            {pythonSubTab === 'realtime' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-retro text-xs text-[#12579b] font-bold">
+                    // hooks/useSupabaseRealtime.ts — zero polling on frontend, scores flip instantly on write
+                  </span>
+                  <button
+                    onClick={() => handleCopy(NEXTJS_REALTIME_HOOK_CODE, 'realtime_hook')}
+                    className="flex items-center gap-1 text-xs font-retro text-[#12579b] hover:underline cursor-pointer"
+                  >
+                    {copiedKey === 'realtime_hook' ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                    <span>Copy Realtime Hook</span>
+                  </button>
+                </div>
+                <div className="bg-[#0d1321] text-[#7dd3fc] p-4 rounded border-2 border-[#1a2238] font-mono text-xs overflow-x-auto max-h-[500px]">
+                  <pre className="whitespace-pre">{NEXTJS_REALTIME_HOOK_CODE}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* Subtab 3: GitHub Action */}
+            {pythonSubTab === 'github' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-retro text-xs text-[#12579b] font-bold">
+                    // .github/workflows/live_poller.yml — free scheduled background worker on GitHub
+                  </span>
+                  <button
+                    onClick={() => handleCopy(GITHUB_ACTION_WORKFLOW_CODE, 'gh_workflow')}
+                    className="flex items-center gap-1 text-xs font-retro text-[#12579b] hover:underline cursor-pointer"
+                  >
+                    {copiedKey === 'gh_workflow' ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                    <span>Copy Workflow YAML</span>
+                  </button>
+                </div>
+                <div className="bg-[#0d1321] text-[#7dd3fc] p-4 rounded border-2 border-[#1a2238] font-mono text-xs overflow-x-auto max-h-[500px]">
+                  <pre className="whitespace-pre">{GITHUB_ACTION_WORKFLOW_CODE}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* Subtab 4: Docker */}
+            {pythonSubTab === 'docker' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-retro text-xs text-[#12579b] font-bold">
+                    // Dockerfile.worker & docker-compose.worker.yml — run on any $5 droplet / VPS / Fly.io
+                  </span>
+                  <button
+                    onClick={() => handleCopy(DOCKER_WORKER_CODE, 'docker_code')}
+                    className="flex items-center gap-1 text-xs font-retro text-[#12579b] hover:underline cursor-pointer"
+                  >
+                    {copiedKey === 'docker_code' ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                    <span>Copy Docker Configs</span>
+                  </button>
+                </div>
+                <div className="bg-[#0d1321] text-[#7dd3fc] p-4 rounded border-2 border-[#1a2238] font-mono text-xs overflow-x-auto max-h-[500px]">
+                  <pre className="whitespace-pre">{DOCKER_WORKER_CODE}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* Subtab 5: Systemd */}
+            {pythonSubTab === 'systemd' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-retro text-xs text-[#12579b] font-bold">
+                    // systemd service unit — run as persistent background daemon on Ubuntu / Debian VPS
+                  </span>
+                  <button
+                    onClick={() => handleCopy(SYSTEMD_SERVICE_CODE, 'systemd_code')}
+                    className="flex items-center gap-1 text-xs font-retro text-[#12579b] hover:underline cursor-pointer"
+                  >
+                    {copiedKey === 'systemd_code' ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                    <span>Copy systemd Service</span>
+                  </button>
+                </div>
+                <div className="bg-[#0d1321] text-[#7dd3fc] p-4 rounded border-2 border-[#1a2238] font-mono text-xs overflow-x-auto max-h-[500px]">
+                  <pre className="whitespace-pre">{SYSTEMD_SERVICE_CODE}</pre>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

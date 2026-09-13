@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ScoringRule } from '../types';
-import { SCORING_RULES_NFL } from '../data/mockData';
+import { SCORING_RULES } from '../data/mockData';
 import { Sparkles, Trophy, Plus, RefreshCw } from 'lucide-react';
 
 interface RulesScoringTesterProps {
@@ -8,7 +8,7 @@ interface RulesScoringTesterProps {
 }
 
 export const RulesScoringTester: React.FC<RulesScoringTesterProps> = ({ onScorePoints }) => {
-  const [rules, setRules] = useState<ScoringRule[]>(SCORING_RULES_NFL);
+  const [rules, setRules] = useState<ScoringRule[]>(SCORING_RULES);
   const [simulatedLog, setSimulatedLog] = useState<Array<{ id: number; text: string; points: number }>>([]);
   const [demoTotal, setDemoTotal] = useState(0);
 

@@ -1,172 +1,263 @@
 import React, { useState } from 'react';
-import { LeaderboardEntry, UserProfile } from '../types';
+import { LeaderboardEntry, Competitor, UserProfile } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { PixelHelmetIcon, PixelShieldIcon } from './PixelBadges';
+import { Users, Sparkles } from 'lucide-react';
 
 interface LeaderboardViewProps {
   user: UserProfile;
   friendsList: LeaderboardEntry[];
-  globalList: LeaderboardEntry[];
-  onOpenPlayerDetail?: (username: string) => void;
+  nflCompetitors?: Competitor[];
+  onOpenPlayerDetail?: (player: Competitor) => void;
 }
 
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   user,
   friendsList = [],
-  globalList = [],
+  nflCompetitors = [],
   onOpenPlayerDetail,
 }) => {
-  const [tab, setTab] = useState<'friends' | 'global'>('friends');
+  // Two bold retro toggle buttons: [ FAMILY ] (default) and [ TOP PLAYERS ]
+  const [activeTier, setActiveTier] = useState<'family' | 'players'>('family');
 
   const safeFriends = Array.isArray(friendsList) ? friendsList : [];
-  const safeGlobal = Array.isArray(globalList) ? globalList : [];
-  const currentList = tab === 'friends' ? safeFriends : safeGlobal;
+  const safeNflPlayers = Array.isArray(nflCompetitors) ? nflCompetitors : [];
 
-  // Mini squad tiles on the left column matching Image 4
-  const miniSquad = [
-    { label: 'PE', rating: 85 },
-    { label: '2P0', rating: 85 },
-    { label: '3PR', rating: 85 },
-    { label: '3E9', rating: 81 },
-    { label: 'RB', rating: 86 },
-    { label: 'A7', rating: 88 },
-  ];
+  // Sort Family list with current user's live score dynamically integrated
+  const dynamicFamilyList = safeFriends.map((entry) => {
+    if (entry.isYou || entry.username === 'YOU' || entry.username === user.username) {
+      return {
+        ...entry,
+        isYou: true,
+        score: user.totalScore || entry.score,
+      };
+    }
+    return entry;
+  }).sort((a, b) => b.score - a.score);
+
+  // Sorted NFL athletes descending by points
+  const sortedNflPlayers = safeNflPlayers
+    .slice()
+    .sort((a, b) => (b.score || 0) - (a.score || 0));
+
+  // Helper for rank medal styling
+  const getRankBadge = (rankNumber: number) => {
+    if (rankNumber === 1) {
+      return 'bg-[#f59e0b] text-[#78350f] border-[#b45309]';
+    }
+    if (rankNumber === 2) {
+      return 'bg-[#94a3b8] text-[#0f172a] border-[#64748b]';
+    }
+    if (rankNumber === 3) {
+      return 'bg-[#b45309] text-[#fae5b8] border-[#78350f]';
+    }
+    return 'bg-[#1e293b] text-[#94a3b8] border-[#334155]';
+  };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-4 sm:space-y-6">
-      {/* Top Header matching Image 4 */}
-      <div className="flex items-center justify-center gap-2 sm:gap-3">
-        <PixelShieldIcon size={32} color="#155e9e" className="sm:w-[38px] sm:h-[38px]" />
-        <h1 className="font-pixel text-xl sm:text-3xl text-[#fae5b8] tracking-widest drop-shadow-[0_4px_0_#0f172a] text-center">
-          LEADERBOARD
-        </h1>
+    <div className="w-full max-w-2xl mx-auto space-y-4 sm:space-y-6 box-border px-0 overflow-hidden">
+      
+      {/* Top Header */}
+      <div className="text-center">
+        <div className="flex items-center justify-center gap-2 sm:gap-3 mb-1">
+          <PixelShieldIcon size={32} color="#155e9e" className="sm:w-[36px] sm:h-[36px]" />
+          <h1 className="font-pixel text-xl sm:text-3xl text-[#fae5b8] tracking-widest drop-shadow-[0_4px_0_#0f172a]">
+            LEADERBOARD
+          </h1>
+        </div>
+        <p className="font-retro text-xs sm:text-sm text-[#93c5fd]">
+          HOUSEHOLD & NFL STANDINGS
+        </p>
       </div>
 
-      {/* Tabs: FRIENDS | GLOBAL */}
-      <div className="flex justify-center max-w-md mx-auto gap-2 sm:gap-3">
+      {/* 2-Tier Retro Toggle Buttons: [ FAMILY ] and [ TOP PLAYERS ] */}
+      <div className="flex justify-center w-full max-w-md mx-auto gap-3 sm:gap-4 px-2">
         <button
-          onClick={() => setTab('friends')}
-          className={`touch-manipulation flex-1 py-2.5 sm:py-3 px-3 sm:px-4 font-pixel text-xs sm:text-sm border-3 cursor-pointer transition-all ${
-            tab === 'friends'
+          onClick={() => setActiveTier('family')}
+          className={`touch-manipulation flex-1 py-2.5 sm:py-3 px-3 sm:px-5 font-pixel text-xs sm:text-sm border-3 cursor-pointer transition-all active:translate-y-0.5 flex items-center justify-center gap-2 ${
+            activeTier === 'family'
               ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_4px_0_0_#051a30]'
               : 'bg-[#ebd2a4] text-[#5c3509] border-[#c99a57] hover:bg-[#fae9c8]'
           }`}
         >
-          FRIENDS
+          <Users size={16} />
+          <span>FAMILY</span>
         </button>
+
         <button
-          onClick={() => setTab('global')}
-          className={`touch-manipulation flex-1 py-2.5 sm:py-3 px-3 sm:px-4 font-pixel text-xs sm:text-sm border-3 cursor-pointer transition-all ${
-            tab === 'global'
+          onClick={() => setActiveTier('players')}
+          className={`touch-manipulation flex-1 py-2.5 sm:py-3 px-3 sm:px-5 font-pixel text-xs sm:text-sm border-3 cursor-pointer transition-all active:translate-y-0.5 flex items-center justify-center gap-2 ${
+            activeTier === 'players'
               ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_4px_0_0_#051a30]'
               : 'bg-[#ebd2a4] text-[#5c3509] border-[#c99a57] hover:bg-[#fae9c8]'
           }`}
         >
-          GLOBAL
+          <Sparkles size={16} />
+          <span>TOP PLAYERS</span>
         </button>
       </div>
 
-      {/* Main Grid matching Image 4 */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-start">
+      {/* Main Container: Strict 2 Columns with Zero Horizontal Scrolling */}
+      <div className="pixel-box-cream p-3 sm:p-5 rounded-xs w-full max-w-full overflow-hidden box-border">
         
-        {/* Left Mini Column matching Image 4 */}
-        <div className="md:col-span-4 pixel-box-cream p-3 rounded-xs flex flex-col gap-3">
-          
-          {/* Top: Current User Avatar & Name */}
-          <div className="bg-[#ebd2a4] border-2 border-[#c99a57] p-3 text-center flex flex-col items-center justify-center">
-            <PixelPlayerSprite
-              avatar={user?.avatar}
-              number={user?.avatar?.number}
-              size="sm"
-              withShadow={true}
-            />
-            <span className="font-pixel text-xs text-[#5c3509] mt-2 block tracking-wider">
-              {user?.username ?? 'PLAYER 1'}
+        {/* Tier Subheader Banner */}
+        <div className="flex items-center justify-between pb-2.5 sm:pb-3 mb-3 border-b-2 border-[#d4a86a]">
+          <div>
+            <h2 className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase">
+              {activeTier === 'family' ? 'HOUSEHOLD & FRIENDS RANKING' : 'NFL ATHLETES STANDINGS'}
+            </h2>
+            <span className="font-retro text-[10px] sm:text-[11px] text-[#784610]">
+              {activeTier === 'family'
+                ? 'Household fantasy rankings (sorted by points)'
+                : 'Real NFL player point totals from database'}
             </span>
           </div>
 
-          {/* 6 Mini Roster Badges (PE, 2P0, 3PR, 3E9, RB, A7) */}
-          <div className="grid grid-cols-2 gap-2">
-            {miniSquad.map((item, idx) => (
-              <div
-                key={idx}
-                className="bg-[#ebd2a4] border-2 border-[#c99a57] p-2 flex flex-col items-center justify-center text-center"
-              >
-                <PixelHelmetIcon size={22} color="#155e9e" />
-                <span className="font-pixel text-[10px] text-[#5c3509] mt-1">
-                  {item.label}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Bottom Card: YOU 1,852 */}
-          <div className="bg-[#12579b] border-2 border-[#0a2d52] text-[#fae5b8] p-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <PixelHelmetIcon size={20} color="#38bdf8" />
-              <span className="font-pixel text-[10px]">YOU</span>
-            </div>
-            <span className="font-pixel text-[11px] text-[#fae5b8]">1,852</span>
-          </div>
-
+          <span className="font-pixel text-[10px] sm:text-[11px] text-[#12579b] bg-[#fae9c8] px-2 py-0.5 border border-[#d4a86a] rounded-xs shrink-0">
+            {activeTier === 'family' ? `${dynamicFamilyList.length} MEMBERS` : `${sortedNflPlayers.length} ATHLETES`}
+          </span>
         </div>
 
-        {/* Right Main Container: LEADERBOARD List */}
-        <div className="md:col-span-8 pixel-box-cream p-3 sm:p-5 rounded-xs">
-          
-          {/* Header Banner */}
-          <div className="text-center pb-2.5 sm:pb-3 mb-3 sm:mb-4 border-b-2 border-[#d4a86a]">
-            <h2 className="font-pixel text-base sm:text-xl text-[#5c3509] tracking-wider uppercase">
-              LEADERBORD
-            </h2>
-            <div className="font-pixel text-[10px] sm:text-xs text-[#12579b] mt-1 tracking-widest">
-              {tab === 'friends' ? 'FRIENDS' : 'GLOBAL RANKINGS'}
-            </div>
-          </div>
+        {/* 2-Column Table Column Headers */}
+        <div className="flex items-center justify-between px-2.5 sm:px-3 py-1.5 mb-2 bg-[#d4a86a]/30 border border-[#d4a86a] rounded-xs font-pixel text-[10px] text-[#784610]">
+          <span className="tracking-wider">RANK & NAME</span>
+          <span className="tracking-wider text-right">TOTAL POINTS</span>
+        </div>
 
-          {/* Rows matching Image 4 */}
-          <div className="space-y-2.5 sm:space-y-3">
-            {currentList.map((entry, idx) => {
+        {/* List Content */}
+        <div className="space-y-2 w-full">
+          {activeTier === 'family' ? (
+            /* TIER 1: FAMILY RANKING */
+            dynamicFamilyList.map((entry, index) => {
+              const displayRank = index + 1;
+              const isUser = entry.isYou;
+
               return (
                 <div
-                  key={entry.username || idx}
-                  className={`p-2.5 sm:p-4 border-3 flex items-center justify-between transition-all ${
-                    entry.isYou
-                      ? 'bg-[#155e9e] text-[#fae5b8] border-[#0a2d52] shadow-[0_4px_0_0_#051a30]'
-                      : 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_3px_0_0_#051a30]'
+                  key={entry.username || index}
+                  className={`w-full flex items-center justify-between p-2.5 sm:p-3 border-2 rounded-xs transition-all box-border ${
+                    isUser
+                      ? 'bg-[#155e9e] text-[#fae5b8] border-[#38bdf8] shadow-[0_3px_0_0_#051a30]'
+                      : 'bg-[#ebd2a4] text-[#5c3509] border-[#c99a57] hover:bg-[#fae9c8]'
                   }`}
                 >
-                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                    {/* Rank indicator */}
-                    {entry.isYou ? (
-                      <span className="font-pixel text-xs sm:text-sm text-[#38bdf8] font-bold shrink-0">
-                        128
-                      </span>
-                    ) : null}
+                  {/* Column 1: Rank Badge + Helmet Icon + Team/User Name */}
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 pr-2">
+                    {/* Rank Badge */}
+                    <span
+                      className={`font-pixel text-[10px] sm:text-xs px-2 py-0.5 border rounded-xs shrink-0 font-bold ${getRankBadge(
+                        displayRank
+                      )}`}
+                    >
+                      #{displayRank}
+                    </span>
 
                     {/* Pixel Helmet Icon */}
                     <div className="shrink-0">
                       <PixelHelmetIcon
-                        size={24}
-                        color={entry.avatar?.helmetColor || '#155e9e'}
+                        size={22}
+                        color={entry.avatar?.helmetColor || (isUser ? '#38bdf8' : '#155e9e')}
                       />
                     </div>
 
-                    {/* Username */}
-                    <span className="font-pixel text-xs sm:text-sm tracking-wider truncate">
-                      {entry.username}
-                    </span>
+                    {/* Name */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-pixel text-xs sm:text-sm tracking-wide truncate">
+                          {entry.username}
+                        </span>
+                        {isUser && (
+                          <span className="font-pixel text-[9px] px-1.5 py-0.2 bg-[#fde047] text-[#78350f] border border-[#b45309] rounded-2xs shrink-0 font-bold">
+                            YOU
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Score */}
-                  <div className="font-pixel text-xs sm:text-sm tracking-wider shrink-0 ml-3 whitespace-nowrap">
-                    {(entry.score ?? 0).toLocaleString()}
+                  {/* Column 2: Total Points Right-Aligned */}
+                  <div className="flex-shrink-0 whitespace-nowrap ml-2">
+                    <div
+                      className={`px-2.5 py-1 font-pixel text-xs sm:text-sm font-bold border rounded-xs shadow-xs text-right ${
+                        isUser
+                          ? 'bg-[#38bdf8] text-[#080d1a] border-[#0284c7]'
+                          : 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52]'
+                      }`}
+                    >
+                      {entry.score.toLocaleString()} PTS
+                    </div>
                   </div>
                 </div>
               );
-            })}
-          </div>
+            })
+          ) : (
+            /* TIER 2: TOP PLAYERS (Actual NFL Athletes in Descending Points) */
+            sortedNflPlayers.map((player, index) => {
+              const displayRank = index + 1;
 
+              return (
+                <div
+                  key={player.id || index}
+                  onClick={() => onOpenPlayerDetail && onOpenPlayerDetail(player)}
+                  className="w-full flex items-center justify-between p-2 sm:p-2.5 bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-2 border-[#c99a57] rounded-xs cursor-pointer transition-all active:translate-y-0.5 box-border"
+                >
+                  {/* Column 1: Rank Badge + Player Sprite + Name + 3-Letter Team Code */}
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 pr-2">
+                    {/* Rank Badge */}
+                    <span
+                      className={`font-pixel text-[10px] sm:text-xs px-2 py-0.5 border rounded-xs shrink-0 font-bold ${getRankBadge(
+                        displayRank
+                      )}`}
+                    >
+                      #{displayRank}
+                    </span>
+
+                    {/* Mini Player Sprite */}
+                    <div className="shrink-0">
+                      <PixelPlayerSprite
+                        avatar={player.avatar}
+                        number={player.uniformNumber}
+                        size="sm"
+                        withShadow={false}
+                      />
+                    </div>
+
+                    {/* Player Name & Team Badge */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-pixel text-xs sm:text-sm tracking-wide truncate">
+                          {player.displayName}
+                        </span>
+                        {/* Standard 3-Letter Team Abbreviation Badge */}
+                        <span className="px-1.5 py-0.5 bg-[#fae5b8] text-[#12579b] border border-[#c99a57] font-pixel text-[9px] font-bold rounded-2xs shrink-0">
+                          {player.teamCode}
+                        </span>
+                      </div>
+                      <div className="font-retro text-[10px] text-[#784610]">
+                        #{player.uniformNumber} • {player.teamName}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Column 2: Total Points Right-Aligned */}
+                  <div className="flex-shrink-0 whitespace-nowrap ml-2">
+                    <div className="px-2.5 py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-xs sm:text-sm font-bold border border-[#0a2d52] rounded-xs shadow-xs text-right">
+                      {player.score.toLocaleString()} PTS
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer info */}
+        <div className="mt-3 pt-2.5 border-t border-[#d4a86a] text-center text-[10px] font-retro text-[#784610]">
+          {activeTier === 'family' ? (
+            <span>⚡ Points update instantly whenever live scoring plays occur</span>
+          ) : (
+            <span>⚡ Pulled directly from database competitors table</span>
+          )}
         </div>
 
       </div>

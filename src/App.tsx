@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   INITIAL_COMPETITORS,
   INITIAL_USER,
@@ -7,11 +7,13 @@ import {
   LIVE_MATCHES,
 } from './data/mockData';
 import { Competitor, UserProfile, AvatarConfig, Match } from './types';
+import { subscribeToRealtimeScores, fetchLiveNFLCompetitors } from './lib/supabaseClient';
 import { MyTeamView } from './components/MyTeamView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { LiveScoresView } from './components/LiveScoresView';
 import { SimpleRulesView } from './components/SimpleRulesView';
 import { PlayerCardModal } from './components/PlayerCardModal';
+import { PlayerPickerModal } from './components/PlayerPickerModal';
 import { LockerRoomModal } from './components/LockerRoomModal';
 import { DatabaseSchemaView } from './components/DatabaseSchemaView';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -30,6 +32,7 @@ export default function App() {
 
   // Modals state
   const [detailedPlayer, setDetailedPlayer] = useState<Competitor | null>(null);
+  const [pickerSlotIndex, setPickerSlotIndex] = useState<number | null>(null);
   const [isLockerRoomOpen, setIsLockerRoomOpen] = useState(false);
   const [isDbDrawerOpen, setIsDbDrawerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -41,43 +44,129 @@ export default function App() {
     }, 3200);
   };
 
-  // 3 selected players for the active lineup
+  // 🏈 Live Data Hookup: Fetch authentic NFL athletes directly from Supabase competitors table
+  useEffect(() => {
+    let isMounted = true;
+    async function loadLiveAthletes() {
+      const athletes = await fetchLiveNFLCompetitors();
+      if (isMounted && athletes && athletes.length > 0) {
+        setRoster(athletes);
+      }
+    }
+    loadLiveAthletes();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // ⚡ Connect Realtime Wire: Subscribes to Supabase postgres_changes
+  // When Python Poller writes a score to Supabase, numbers flip upward instantly with zero page reload
+  useEffect(() => {
+    const unsubscribe = subscribeToRealtimeScores(
+      (payload) => {
+        const updated = payload?.new as any;
+        if (updated && (updated.id || updated.short_name)) {
+          setRoster((prev) =>
+            (prev || []).map((p) => {
+              if (p.id === updated.id || p.shortName === updated.short_name) {
+                const newScore = updated.score ?? (p.score + 50);
+                return {
+                  ...p,
+                  score: newScore,
+                  stats: updated.stats ? { ...p.stats, ...updated.stats } : p.stats,
+                };
+              }
+              return p;
+            })
+          );
+          showToast(`⚡ REALTIME WIRE: ${updated.short_name || 'Player'} updated to ${updated.score?.toLocaleString() || ''} PTS!`);
+        }
+      },
+      (matchPayload) => {
+        const updatedMatch = matchPayload?.new as any;
+        if (updatedMatch && updatedMatch.id) {
+          setMatches((prev) =>
+            (prev || []).map((m) =>
+              m.id === updatedMatch.id ? { ...m, ...updatedMatch } : m
+            )
+          );
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // 3 selected players for the active lineup (STAR 1, STAR 2, STAR 3)
   const safeUserSelectedIds = user?.selectedPlayerIds || [];
-  const selectedPlayers = safeUserSelectedIds
-    .map(id => (roster || []).find(p => p.id === id))
-    .filter(Boolean) as Competitor[];
+  const selectedPlayers = [0, 1, 2].map((slotIdx) => {
+    const id = safeUserSelectedIds[slotIdx];
+    return (roster || []).find((p) => p.id === id) || null;
+  }).filter(Boolean) as Competitor[];
+
+  // Assign any real NFL athlete into a specific STAR slot (STAR 1, 2, or 3)
+  const handleAssignSlot = (player: Competitor, slotIndex: number) => {
+    setUser((prev) => {
+      const currentIds = [...(prev.selectedPlayerIds || [])];
+      while (currentIds.length < 3) {
+        currentIds.push('');
+      }
+      // If player is already in another slot, clear that slot to avoid duplicate
+      for (let i = 0; i < 3; i++) {
+        if (currentIds[i] === player.id) {
+          currentIds[i] = '';
+        }
+      }
+      currentIds[slotIndex] = player.id;
+      return {
+        ...prev,
+        selectedPlayerIds: currentIds,
+      };
+    });
+    showToast(`★ ${player.displayName} (${player.teamCode}) assigned to STAR ${slotIndex + 1}!`);
+  };
+
+  // Clear a specific STAR slot
+  const handleClearSlot = (slotIndex: number) => {
+    setUser((prev) => {
+      const currentIds = [...(prev.selectedPlayerIds || [])];
+      if (currentIds[slotIndex]) {
+        currentIds[slotIndex] = '';
+      }
+      return {
+        ...prev,
+        selectedPlayerIds: currentIds,
+      };
+    });
+    showToast(`Cleared STAR ${slotIndex + 1} slot.`);
+  };
 
   // Toggle player into 3-player lineup
   const handleTogglePlayer = (player: Competitor) => {
     const isSelected = safeUserSelectedIds.includes(player.id);
     if (isSelected) {
-      setUser(prev => ({
+      setUser((prev) => ({
         ...prev,
-        selectedPlayerIds: prev.selectedPlayerIds.filter(id => id !== player.id),
+        selectedPlayerIds: prev.selectedPlayerIds.map((id) => (id === player.id ? '' : id)),
       }));
-      showToast(`Removed ${player.shortName} from your 3-player lineup.`);
+      showToast(`Removed ${player.displayName} from your 3 Stars.`);
     } else {
-      if (safeUserSelectedIds.length >= 3) {
-        showToast(`Lineup is full! Max 3 players allowed for this week.`);
-        return;
+      // Find first empty slot
+      const emptyIdx = [0, 1, 2].find((idx) => !safeUserSelectedIds[idx]);
+      if (emptyIdx !== undefined) {
+        handleAssignSlot(player, emptyIdx);
+      } else {
+        // Replace slot 0 if all are full
+        handleAssignSlot(player, 0);
       }
-      setUser(prev => ({
-        ...prev,
-        selectedPlayerIds: [...prev.selectedPlayerIds, player.id],
-      }));
-      showToast(`Added ${player.shortName} to your 3-player lineup! ⭐`);
     }
   };
 
-  // Open detail for slot selection
-  const handleSelectSlot = (_index: number) => {
-    // Find first available player not in team and open their card for immediate 1-tap addition
-    const available = (roster || []).find(p => !safeUserSelectedIds.includes(p.id));
-    if (available) {
-      setDetailedPlayer(available);
-    } else {
-      showToast('Your 3-player lineup is already full! Remove a player to swap.');
-    }
+  // Tapping any slot opens the player picker for that slot
+  const handleSelectSlot = (slotIndex: number) => {
+    setPickerSlotIndex(slotIndex);
   };
 
   // Locker room avatar save
@@ -264,6 +353,7 @@ export default function App() {
                 user={user}
                 selectedPlayers={selectedPlayers}
                 onSelectSlot={handleSelectSlot}
+                onClearSlot={handleClearSlot}
                 onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
                 onOpenLockerRoom={() => setIsLockerRoomOpen(true)}
                 onOpenStatsModal={() => setCurrentTab('live')}
@@ -284,11 +374,8 @@ export default function App() {
               <LeaderboardView
                 user={user}
                 friendsList={friendsList}
-                globalList={globalList}
-                onOpenPlayerDetail={(name) => {
-                  const p = (roster || []).find(r => r.displayName === name || r.shortName === name);
-                  if (p) setDetailedPlayer(p);
-                }}
+                nflCompetitors={roster}
+                onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
               />
             )}
 
@@ -351,6 +438,20 @@ export default function App() {
         )}
 
         {/* Modals */}
+        {pickerSlotIndex !== null && (
+          <PlayerPickerModal
+            isOpen={pickerSlotIndex !== null}
+            onClose={() => setPickerSlotIndex(null)}
+            slotIndex={pickerSlotIndex}
+            allPlayers={roster}
+            selectedPlayerIds={safeUserSelectedIds}
+            onSelectPlayer={(player, slotIdx) => {
+              handleAssignSlot(player, slotIdx);
+              setPickerSlotIndex(null);
+            }}
+          />
+        )}
+
         {detailedPlayer && (
           <PlayerCardModal
             player={detailedPlayer}
