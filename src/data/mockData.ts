@@ -1,5 +1,4 @@
 import { Competitor, LeaderboardEntry, Match, ScoringRule, Sport, UserProfile } from '../types';
-import { NFL_250_ATHLETES_POOL, NFL_MATCH_SLATE } from './nflAthletesPool';
 
 export const INITIAL_SPORTS: Sport[] = [
   { id: 'nfl', name: 'Football', category: 'Gridiron', seasonLabel: 'Week 2', icon: '🏈' },
@@ -9,10 +8,11 @@ export const INITIAL_SPORTS: Sport[] = [
 ];
 
 /**
- * 250+ Authentic Active NFL Offensive Athletes across all 32 NFL Teams.
- * Initial points strictly default to whole-number scores and hydrate live from Supabase.
+ * Athletes and matches hydrate 100% live from the Supabase database.
+ * No stale mock data or static fallbacks.
  */
-export const INITIAL_COMPETITORS: Competitor[] = NFL_250_ATHLETES_POOL;
+export const INITIAL_COMPETITORS: Competitor[] = [];
+export const LIVE_MATCHES: Match[] = [];
 
 export const INITIAL_USER: UserProfile = {
   username: 'YOU',
@@ -84,11 +84,6 @@ export const INITIAL_LEADERBOARD_FAMILY: LeaderboardEntry[] = [
 
 export const INITIAL_LEADERBOARD_FRIENDS = INITIAL_LEADERBOARD_FAMILY;
 export const INITIAL_LEADERBOARD_GLOBAL = INITIAL_LEADERBOARD_FAMILY;
-
-/**
- * Authentic Active Match Slate for Week Game Filters & Live Tracking
- */
-export const LIVE_MATCHES: Match[] = NFL_MATCH_SLATE;
 
 export const SCORING_RULES: ScoringRule[] = [
   {

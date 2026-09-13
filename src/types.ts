@@ -60,8 +60,14 @@ export interface Match {
   sportId: SportId;
   homeTeam: string;
   awayTeam: string;
-  homeTeamCode?: string;
-  awayTeamCode?: string;
+  homeTeamCode: string;
+  awayTeamCode: string;
+  home_team?: string;
+  away_team?: string;
+  home_score?: number;
+  away_score?: number;
+  quarter_time?: string;
+  quarterTime?: string;
   status: 'upcoming' | 'live' | 'final';
   periodLabel: string;
   homeScore: number;

@@ -3,7 +3,6 @@ import { Competitor, Match, ActiveSlot } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { X, Search, Sparkles } from 'lucide-react';
 import { splitPlayerFirstLastName } from '../utils/formatters';
-import { NFL_MATCH_SLATE, TOP_12_SUPERSTARS_IDS } from '../data/nflAthletesPool';
 
 interface PlayerPickerModalProps {
   isOpen: boolean;
@@ -37,23 +36,19 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGameFilter, setSelectedGameFilter] = useState<string>('ALL');
 
-  // Available match slate for the game filter pills
+  // Available real matches strictly from Supabase
   const activeMatches = useMemo(() => {
-    return matches && matches.length > 0 ? matches : NFL_MATCH_SLATE;
+    return Array.isArray(matches) ? matches : [];
   }, [matches]);
-
-  // Household superstars for the pinned row
-  const superstarPlayers = useMemo(() => {
-    const list = Array.isArray(allPlayers) ? allPlayers : [];
-    return TOP_12_SUPERSTARS_IDS.map((id) =>
-      list.find((p) => p.id.toLowerCase() === id.toLowerCase() || p.shortName.toLowerCase() === id.toLowerCase())
-    ).filter(Boolean) as Competitor[];
-  }, [allPlayers]);
 
   // Selected game filter match object (if not ALL)
   const activeMatchObj = useMemo(() => {
     if (selectedGameFilter === 'ALL') return null;
-    return activeMatches.find((m) => m.id === selectedGameFilter) || null;
+    return activeMatches.find((m) => {
+      const away = (m.awayTeamCode || m.away_team || '').trim().toUpperCase();
+      const home = (m.homeTeamCode || m.home_team || '').trim().toUpperCase();
+      return m.id === selectedGameFilter || `${away}@${home}` === selectedGameFilter;
+    }) || null;
   }, [selectedGameFilter, activeMatches]);
 
   // Filtered players list based on match filter & search query
@@ -61,12 +56,12 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
     const q = searchQuery.trim().toLowerCase();
     let list = Array.isArray(allPlayers) ? [...allPlayers] : [];
 
-    // Filter by selected game first
+    // Filter by selected game first: strictly players on the two teams of the match
     if (activeMatchObj) {
-      const away = (activeMatchObj.awayTeamCode || '').toUpperCase();
-      const home = (activeMatchObj.homeTeamCode || '').toUpperCase();
+      const away = (activeMatchObj.awayTeamCode || activeMatchObj.away_team || '').trim().toUpperCase();
+      const home = (activeMatchObj.homeTeamCode || activeMatchObj.home_team || '').trim().toUpperCase();
       list = list.filter((p) => {
-        const code = (p.teamCode || '').toUpperCase();
+        const code = (p.teamCode || '').trim().toUpperCase();
         return code === away || code === home;
       });
     }
@@ -86,6 +81,43 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
     // Sort by points descending so live top scorers lead the list
     return list.sort((a, b) => (b.score || 0) - (a.score || 0));
   }, [allPlayers, activeMatchObj, searchQuery]);
+
+  // Household superstars for the pinned row from real Supabase competitors
+  const superstarPlayers = useMemo(() => {
+    const list = Array.isArray(allPlayers) ? allPlayers : [];
+    if (list.length === 0) return [];
+    const targetNames = [
+      'josh allen',
+      'derrick henry',
+      'saquon barkley',
+      'patrick mahomes',
+      'ceedee lamb',
+      'justin jefferson',
+      'jalen hurts',
+      'lamar jackson',
+      'trevor lawrence',
+      'c.j. stroud',
+      'joe burrow',
+      'baker mayfield'
+    ];
+    const found: Competitor[] = [];
+    targetNames.forEach((name) => {
+      const p = list.find((item) => item.displayName.toLowerCase().includes(name));
+      if (p && !found.some((f) => f.id === p.id)) {
+        found.push(p);
+      }
+    });
+    if (found.length < 12) {
+      const remaining = [...list].sort((a, b) => (b.score || 0) - (a.score || 0));
+      for (const p of remaining) {
+        if (!found.some((f) => f.id === p.id)) {
+          found.push(p);
+          if (found.length >= 12) break;
+        }
+      }
+    }
+    return found;
+  }, [allPlayers]);
 
   if (!isOpen) return null;
 
@@ -133,30 +165,47 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
                   : 'bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-[#c99a57]'
               }`}
             >
-              ★ ALL PLAYERS
+              ★ ALL
             </button>
 
-            {/* Individual Game Pills: [ BUF vs HOU ] [ CLE vs JAX ] ... */}
+            {/* Individual Game Pills: [ WSH @ PHI ] [ BUF @ HOU ] [ CHI @ CAR ] ... */}
             {activeMatches.map((match) => {
-              const isSelected = selectedGameFilter === match.id;
+              const away = (match.awayTeamCode || match.away_team || '').trim().toUpperCase();
+              const home = (match.homeTeamCode || match.home_team || '').trim().toUpperCase();
+              const isSelected = selectedGameFilter === match.id || selectedGameFilter === `${away}@${home}`;
               return (
                 <button
                   key={match.id}
                   onClick={() => setSelectedGameFilter(match.id)}
-                  className={`touch-manipulation px-2 py-1.5 font-pixel text-[10px] sm:text-xs border-2 rounded-xs shrink-0 whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 ${
+                  className={`touch-manipulation px-2.5 py-1.5 font-pixel text-[10px] sm:text-xs border-2 rounded-xs shrink-0 whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 ${
                     isSelected
                       ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30]'
                       : 'bg-[#ebd2a4] hover:bg-[#fae9c8] text-[#5c3509] border-[#c99a57]'
                   }`}
                 >
-                  <span className="font-bold">{match.awayTeamCode}</span>
+                  <span className="font-bold">{away}</span>
                   <span className="opacity-70 mx-1">@</span>
-                  <span className="font-bold">{match.homeTeamCode}</span>
+                  <span className="font-bold">{home}</span>
                 </button>
               );
             })}
           </div>
         </div>
+
+        {/* Active game filter banner if a game is selected */}
+        {activeMatchObj && (
+          <div className="mb-2 p-1.5 bg-[#e0f2fe] border border-[#0284c7] rounded-xs flex items-center justify-between shrink-0">
+            <span className="font-pixel text-[10px] sm:text-[11px] text-[#0369a1]">
+              FILTERED: <span className="font-bold">{activeMatchObj.awayTeamCode || activeMatchObj.away_team} @ {activeMatchObj.homeTeamCode || activeMatchObj.home_team}</span> ({filteredPlayers.length} players)
+            </span>
+            <button
+              onClick={() => setSelectedGameFilter('ALL')}
+              className="font-pixel text-[9px] text-[#b91c1c] underline hover:text-[#7f1d1d] cursor-pointer"
+            >
+              CLEAR FILTER
+            </button>
+          </div>
+        )}
 
         {/* PINNED TOP SUPERSTARS ROW: One-Tap Access to Household Stars */}
         {selectedGameFilter === 'ALL' && !searchQuery && (

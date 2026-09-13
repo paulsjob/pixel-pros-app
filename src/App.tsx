@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  INITIAL_COMPETITORS,
   INITIAL_USER,
-  LIVE_MATCHES,
 } from './data/mockData';
 import { Competitor, UserProfile, Match, UserRoster, ActiveSlot, SquadSlots } from './types';
 import {
@@ -13,6 +11,7 @@ import {
   fetchRoomRosters,
 } from './lib/supabaseClient';
 import { getDeviceId } from './lib/deviceIdentity';
+import { getTeamFullName } from './utils/teamData';
 import { MyTeamView } from './components/MyTeamView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { SimpleRulesView } from './components/SimpleRulesView';
@@ -22,10 +21,6 @@ import { DatabaseSchemaView } from './components/DatabaseSchemaView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PixelHelmetIcon } from './components/PixelBadges';
 import { Users, Trophy, Database, HelpCircle, X } from 'lucide-react';
-
-const DEFAULT_STAR_IDS: Record<string, [string, string, string]> = {
-  COUCH: ['mahomes', 'henry', 'lamb'],
-};
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'squad' | 'couch'>('squad');
@@ -48,9 +43,9 @@ export default function App() {
     }
   });
 
-  // Master NFL athletes and matches loaded from Supabase / mockData
-  const [roster, setRoster] = useState<Competitor[]>(INITIAL_COMPETITORS);
-  const [matches, setMatches] = useState<Match[]>(LIVE_MATCHES);
+  // Master NFL athletes and matches loaded directly from Supabase
+  const [roster, setRoster] = useState<Competitor[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
   const [roomRosters, setRoomRosters] = useState<UserRoster[]>([]);
 
   // Explicit 3-slot roster state: star1, star2, star3 (Can be null)
@@ -58,27 +53,7 @@ export default function App() {
     star1: Competitor | null;
     star2: Competitor | null;
     star3: Competitor | null;
-  }>(() => {
-    try {
-      const activeRoom = (localStorage.getItem('pixel_pros_room_code') || 'COUCH').trim().toUpperCase();
-      const saved = localStorage.getItem(`pixel_pros_roster_${activeRoom}`) || localStorage.getItem('pixel_pros_user_stars');
-      if (saved) {
-        const ids: string[] = JSON.parse(saved);
-        if (Array.isArray(ids)) {
-          const s1 = INITIAL_COMPETITORS.find((p) => p.id === ids[0]) || null;
-          const s2 = INITIAL_COMPETITORS.find((p) => p.id === ids[1]) || null;
-          const s3 = INITIAL_COMPETITORS.find((p) => p.id === ids[2]) || null;
-          return { star1: s1, star2: s2, star3: s3 };
-        }
-      }
-    } catch {
-      // ignore
-    }
-    const d1 = INITIAL_COMPETITORS.find((p) => p.id === 'mahomes') || null;
-    const d2 = INITIAL_COMPETITORS.find((p) => p.id === 'henry') || null;
-    const d3 = INITIAL_COMPETITORS.find((p) => p.id === 'lamb') || null;
-    return { star1: d1, star2: d2, star3: d3 };
-  });
+  }>({ star1: null, star2: null, star3: null });
 
   // Track activeSlot ('star1' | 'star2' | 'star3') when tapping a slot
   const [activeSlot, setActiveSlot] = useState<ActiveSlot | null>(null);
@@ -285,11 +260,36 @@ export default function App() {
         if (isMounted) {
           if (athletes && athletes.length > 0) {
             setRoster(athletes);
-            // Re-sync active squad objects with live scores
+            // Re-sync active squad objects with live scores or restore from saved room picks
+            const activeRoom = (localStorage.getItem('pixel_pros_room_code') || 'COUCH').trim().toUpperCase();
+            const saved = localStorage.getItem(`pixel_pros_roster_${activeRoom}`) || localStorage.getItem('pixel_pros_user_stars');
+            let s1: Competitor | null = null;
+            let s2: Competitor | null = null;
+            let s3: Competitor | null = null;
+
+            if (saved) {
+              try {
+                const ids: string[] = JSON.parse(saved);
+                if (Array.isArray(ids)) {
+                  s1 = athletes.find((a) => a.id === ids[0] || a.shortName.toLowerCase() === ids[0]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[0]?.toLowerCase())) || null;
+                  s2 = athletes.find((a) => a.id === ids[1] || a.shortName.toLowerCase() === ids[1]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[1]?.toLowerCase())) || null;
+                  s3 = athletes.find((a) => a.id === ids[2] || a.shortName.toLowerCase() === ids[2]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[2]?.toLowerCase())) || null;
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            if (!s1 && !s2 && !s3 && activeRoom === 'COUCH') {
+              s1 = athletes.find((a) => a.displayName.toLowerCase().includes('josh allen')) || athletes[0] || null;
+              s2 = athletes.find((a) => a.displayName.toLowerCase().includes('derrick henry')) || athletes[1] || null;
+              s3 = athletes.find((a) => a.displayName.toLowerCase().includes('ceedee lamb')) || athletes.find((a) => a.displayName.toLowerCase().includes('mahomes')) || athletes[2] || null;
+            }
+
             setSquadSlots((prev) => ({
-              star1: prev.star1 ? (athletes.find((a) => a.id === prev.star1?.id) || prev.star1) : null,
-              star2: prev.star2 ? (athletes.find((a) => a.id === prev.star2?.id) || prev.star2) : null,
-              star3: prev.star3 ? (athletes.find((a) => a.id === prev.star3?.id) || prev.star3) : null,
+              star1: s1 || (prev.star1 ? (athletes.find((a) => a.id === prev.star1?.id || a.displayName.toLowerCase() === prev.star1?.displayName.toLowerCase()) || prev.star1) : null),
+              star2: s2 || (prev.star2 ? (athletes.find((a) => a.id === prev.star2?.id || a.displayName.toLowerCase() === prev.star2?.displayName.toLowerCase()) || prev.star2) : null),
+              star3: s3 || (prev.star3 ? (athletes.find((a) => a.id === prev.star3?.id || a.displayName.toLowerCase() === prev.star3?.displayName.toLowerCase()) || prev.star3) : null),
             }));
           }
           if (liveMatches && liveMatches.length > 0) {
@@ -382,8 +382,39 @@ export default function App() {
         }
       },
       (matchPayload) => {
-        const updatedMatch = matchPayload?.new as any;
-        if (updatedMatch && updatedMatch.id) {
+        const row = matchPayload?.new as any;
+        if (row && row.id) {
+          const homeCode = String(row.home_team || row.home_team_code || '').trim().toUpperCase();
+          const awayCode = String(row.away_team || row.away_team_code || '').trim().toUpperCase();
+          const rawStatus = String(row.status || '').toLowerCase();
+          const qTime = String(row.quarter_time || '').trim();
+
+          const isFinal = rawStatus === 'final' || qTime.toLowerCase().includes('final');
+          const isLive = rawStatus === 'live' || (!isFinal && (qTime.includes('th') || qTime.includes('1st') || qTime.includes('2nd') || qTime.includes('3rd') || qTime.includes('Half') || qTime.includes('OT')));
+          const isScheduled = !isFinal && !isLive;
+
+          const awayScore = Number(row.away_score || 0);
+          const homeScore = Number(row.home_score || 0);
+
+          const updatedMatch: Match = {
+            id: String(row.id),
+            sportId: 'nfl',
+            homeTeam: getTeamFullName(homeCode),
+            awayTeam: getTeamFullName(awayCode),
+            homeTeamCode: homeCode,
+            awayTeamCode: awayCode,
+            home_team: homeCode,
+            away_team: awayCode,
+            home_score: homeScore,
+            away_score: awayScore,
+            quarter_time: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
+            quarterTime: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
+            status: isFinal ? 'final' : isLive ? 'live' : 'upcoming',
+            periodLabel: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
+            homeScore,
+            awayScore,
+          };
+
           setMatches((prev) => {
             const exists = (prev || []).some((m) => m.id === updatedMatch.id);
             if (exists) {

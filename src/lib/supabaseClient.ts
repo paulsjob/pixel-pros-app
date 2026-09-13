@@ -1,21 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
 import { Competitor, Match, UserRoster } from '../types';
-import { INITIAL_COMPETITORS, LIVE_MATCHES } from '../data/mockData';
 import { getDeviceId } from './deviceIdentity';
+import { getTeamColors, getTeamFullName, getUniformNumber } from '../utils/teamData';
 
-// Fallback to demo Supabase project if env variables are not yet configured in local environment
+// Ensure Supabase URL and Keys are populated from Vite defines or process.env
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : {};
 const procEnv = typeof process !== 'undefined' ? process.env : {};
 
 export const SUPABASE_URL =
-  metaEnv?.VITE_SUPABASE_URL ||
   procEnv?.NEXT_PUBLIC_SUPABASE_URL ||
+  procEnv?.SUPABASE_URL ||
+  metaEnv?.VITE_SUPABASE_URL ||
   'https://sqntjgjqtwbcqpxcqzbg.supabase.co';
 
 export const SUPABASE_ANON_KEY =
-  metaEnv?.VITE_SUPABASE_ANON_KEY ||
   procEnv?.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key_for_preview';
+  procEnv?.SUPABASE_ANON_KEY ||
+  procEnv?.SUPABASE_SERVICE_ROLE_KEY ||
+  metaEnv?.VITE_SUPABASE_ANON_KEY ||
+  '';
 
 // Supabase client instance with Realtime enabled
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -26,185 +29,161 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   },
 });
 
+const SKIN_TONES = ['#f7d7b5', '#d98c55', '#8c532b', '#e6ba8c', '#5c3509'];
+function getSkinTone(name?: string): string {
+  if (!name) return '#d98c55';
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash << 5) - hash + name.charCodeAt(i);
+  }
+  return SKIN_TONES[Math.abs(hash) % SKIN_TONES.length];
+}
+
 /**
- * Fetches real active NFL competitors directly from the Supabase competitors table.
- * Hydrates strictly from competitors ordered by score DESC limit 20.
- * Every athlete's points come strictly from the database; if unplayed or 0, score is 0.
+ * Maps a single Supabase `competitors` database row directly to our frontend Competitor model.
+ */
+export function mapRowToCompetitor(row: any): Competitor {
+  const rawId = String(row.id || '');
+  const rawName = String(row.name || row.display_name || 'NFL Pro').trim();
+  const rawTeam = String(row.team || row.team_code || 'NFL').trim().toUpperCase();
+  const rawPos = String(row.position || 'STAR').trim().toUpperCase();
+  const rawScore = Math.max(0, Math.round(Number(row.score ?? row.fantasy_points ?? 0)));
+
+  const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
+  const passYds = Number(statsObj.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? 0);
+  const rushYds = Number(statsObj.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? 0);
+  const recYds = Number(statsObj.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? 0);
+  const tds = Number(statsObj.tds ?? statsObj.touchdowns ?? 0);
+  const fgs = Number(statsObj.fgs ?? statsObj.field_goals ?? 0);
+  const stops = Number(statsObj.stops ?? statsObj.defensive_stops ?? 0);
+  const totalScrimmageYards = passYds + rushYds + recYds;
+
+  const parts = rawName.split(/\s+/);
+  const shortName = (parts[parts.length - 1] || 'PRO').toUpperCase();
+  const uniformNum = Number(row.uniform_number || row.jersey_number || getUniformNumber(rawName, rawId));
+  const teamColors = getTeamColors(rawTeam);
+
+  return {
+    id: rawId,
+    sportId: 'nfl',
+    displayName: rawName,
+    shortName,
+    uniformNumber: uniformNum,
+    teamName: getTeamFullName(rawTeam),
+    teamCode: rawTeam,
+    positionGeneric: rawPos === 'K' ? 'SCORER' : 'OFFENSE',
+    position: rawPos,
+    rating: rawScore > 30 ? 99 : rawScore > 15 ? 93 : 88,
+    score: rawScore,
+    stats: {
+      ...statsObj,
+      pass_yds: passYds,
+      rush_yds: rushYds,
+      rec_yds: recYds,
+      tds: tds,
+      fgs: fgs,
+      stops: stops,
+      passingYards: passYds,
+      rushingYards: rushYds,
+      receivingYards: recYds,
+      touchdowns: tds,
+      total_yards: totalScrimmageYards,
+      primaryMetricLabel: 'Touchdowns',
+      primaryMetricValue: tds,
+    },
+    badges: rawScore >= 30 ? ['diamond_crystal', 'gold_star'] : rawScore >= 15 ? ['gold_star'] : ['shield_badge'],
+    avatar: {
+      helmetColor: teamColors.helmet,
+      jerseyColor: teamColors.jersey,
+      stripeColor: teamColors.stripe,
+      skinTone: getSkinTone(rawName),
+      number: uniformNum,
+    },
+  };
+}
+
+/**
+ * Fetches real active NFL competitors 100% directly from the Supabase competitors table.
+ * Strictly presents athletes in that query with genuine database scores and team affiliations.
  */
 export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
   try {
     const { data, error } = await supabase
       .from('competitors')
       .select('*')
-      .order('score', { ascending: false })
-      .limit(350);
+      .order('score', { ascending: false });
 
-    if (error || !data || data.length === 0) {
-      return INITIAL_COMPETITORS;
+    if (error) {
+      console.warn('⚡ Error fetching competitors from Supabase:', error.message);
+      return [];
     }
 
-    // Merge Supabase scores into our athlete pool so all 250+ players are preserved
-    const fetchedMap = new Map<string, any>();
-    data.forEach((row: any) => {
-      const key = String(row.id || row.external_provider_id || row.short_name?.toLowerCase()).toLowerCase();
-      fetchedMap.set(key, row);
-      if (row.short_name) {
-        fetchedMap.set(row.short_name.toLowerCase(), row);
-      }
-      if (row.display_name) {
-        fetchedMap.set(row.display_name.toLowerCase(), row);
-      }
-    });
+    if (!data || data.length === 0) {
+      return [];
+    }
 
-    const result = INITIAL_COMPETITORS.map((fallback) => {
-      const row =
-        fetchedMap.get(fallback.id.toLowerCase()) ||
-        fetchedMap.get(fallback.shortName.toLowerCase()) ||
-        fetchedMap.get(fallback.displayName.toLowerCase());
-      if (!row) return fallback;
-
-      const rawScore = row.score ?? row.fantasy_points ?? fallback.score;
-      const wholeScore = Math.max(0, Math.round(Number(rawScore) || 0));
-
-      const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
-      const passYds = Number(statsObj.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? row.pass_yds ?? row.passing_yards ?? 0);
-      const rushYds = Number(statsObj.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? row.rush_yds ?? row.rushing_yards ?? 0);
-      const recYds = Number(statsObj.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? row.rec_yds ?? row.receiving_yards ?? 0);
-      const tds = Number(statsObj.tds ?? statsObj.touchdowns ?? row.tds ?? row.touchdowns ?? 0);
-
-      return {
-        ...fallback,
-        displayName: row.display_name || fallback.displayName,
-        shortName: row.short_name || fallback.shortName,
-        uniformNumber: Number(row.uniform_number || row.jersey_number || fallback.uniformNumber),
-        teamName: row.team_name || fallback.teamName,
-        teamCode: (row.team_code || fallback.teamCode).toUpperCase(),
-        position: row.position || fallback.position,
-        score: wholeScore,
-        stats: {
-          ...statsObj,
-          pass_yds: passYds,
-          rush_yds: rushYds,
-          rec_yds: recYds,
-          tds: tds,
-          passingYards: passYds,
-          rushingYards: rushYds,
-          receivingYards: recYds,
-          touchdowns: tds,
-          primaryMetricLabel: 'Touchdowns',
-          primaryMetricValue: tds,
-        },
-      };
-    });
-
-    // Also include any new players returned from Supabase that weren't in INITIAL_COMPETITORS
-    data.forEach((row: any) => {
-      const id = String(row.id || row.external_provider_id || row.short_name?.toLowerCase());
-      const alreadyExists = result.some(p => p.id.toLowerCase() === id.toLowerCase() || p.shortName.toLowerCase() === row.short_name?.toLowerCase());
-      if (!alreadyExists) {
-        const rawScore = row.score ?? row.fantasy_points ?? 0;
-        const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
-        const passYds = Number(statsObj.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? row.pass_yds ?? row.passing_yards ?? 0);
-        const rushYds = Number(statsObj.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? row.rush_yds ?? row.rushing_yards ?? 0);
-        const recYds = Number(statsObj.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? row.rec_yds ?? row.receiving_yards ?? 0);
-        const tds = Number(statsObj.tds ?? statsObj.touchdowns ?? row.tds ?? row.touchdowns ?? 0);
-
-        result.push({
-          id,
-          sportId: 'nfl',
-          displayName: row.display_name || row.short_name || 'NFL Pro',
-          shortName: (row.short_name || 'PRO').toUpperCase(),
-          uniformNumber: Number(row.uniform_number || 10),
-          teamName: row.team_name || 'NFL',
-          teamCode: (row.team_code || 'NFL').toUpperCase(),
-          positionGeneric: row.position_generic || 'OFFENSE',
-          position: row.position || 'WR',
-          rating: Number(row.rating || 90),
-          score: Math.max(0, Math.round(Number(rawScore) || 0)),
-          stats: {
-            ...statsObj,
-            pass_yds: passYds,
-            rush_yds: rushYds,
-            rec_yds: recYds,
-            tds: tds,
-            passingYards: passYds,
-            rushingYards: rushYds,
-            receivingYards: recYds,
-            touchdowns: tds,
-            primaryMetricLabel: 'Touchdowns',
-            primaryMetricValue: tds,
-          },
-          badges: ['gold_star'],
-          avatar: {
-            helmetColor: '#12579b',
-            jerseyColor: '#12579b',
-            stripeColor: '#ffffff',
-            skinTone: '#d98c55',
-            number: Number(row.uniform_number || 10),
-          },
-        });
-      }
-    });
-
-    return result.sort((a, b) => b.score - a.score);
+    return data.map(mapRowToCompetitor).sort((a, b) => b.score - a.score);
   } catch (err) {
-    console.warn('⚡ Live Supabase fetch encountered error, using genuine local NFL roster:', err);
-    return INITIAL_COMPETITORS;
+    console.warn('⚡ Live Supabase fetch encountered exception:', err);
+    return [];
   }
 }
 
 /**
  * Fetches real NFL games directly from the Supabase matches table (sport = 'nfl').
- * Falls back cleanly to LIVE_MATCHES (the active week match slate).
+ * Maps columns: home_team, away_team, home_score, away_score, quarter_time, status.
  */
 export async function fetchLiveNFLMatches(): Promise<Match[]> {
   try {
     const { data, error } = await supabase
       .from('matches')
       .select('*')
-      .eq('sport_id', 'nfl')
-      .order('scheduled_at', { ascending: true });
+      .eq('sport', 'nfl');
 
-    if (error || !data || data.length === 0) {
-      return LIVE_MATCHES;
+    if (error) {
+      console.warn('⚡ Error fetching matches from Supabase:', error.message);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
     }
 
     return data.map((row: any): Match => {
-      const rawStatus = (row.status || 'scheduled').toLowerCase();
-      const isLive = rawStatus === 'live' || rawStatus === 'in_progress';
-      const isFinal = rawStatus === 'final' || rawStatus === 'completed';
-      const isScheduled = !isLive && !isFinal;
+      const homeCode = String(row.home_team || row.home_team_code || '').trim().toUpperCase();
+      const awayCode = String(row.away_team || row.away_team_code || '').trim().toUpperCase();
+      const rawStatus = String(row.status || '').toLowerCase();
+      const qTime = String(row.quarter_time || '').trim();
 
-      let periodLabel = row.period_label;
-      if (isScheduled && !periodLabel && row.scheduled_at) {
-        try {
-          periodLabel = new Date(row.scheduled_at).toLocaleTimeString([], {
-            hour: 'numeric',
-            minute: '2-digit',
-            timeZoneName: 'short',
-          });
-        } catch {
-          periodLabel = '1:00 PM EDT';
-        }
-      }
+      const isFinal = rawStatus === 'final' || qTime.toLowerCase().includes('final');
+      const isLive = rawStatus === 'live' || (!isFinal && (qTime.includes('th') || qTime.includes('1st') || qTime.includes('2nd') || qTime.includes('3rd') || qTime.includes('Half') || qTime.includes('OT')));
+      const isScheduled = !isFinal && !isLive;
+
+      const awayScore = Number(row.away_score || 0);
+      const homeScore = Number(row.home_score || 0);
 
       return {
-        id: String(row.id || row.external_match_id),
+        id: String(row.id),
         sportId: 'nfl',
-        homeTeam: row.home_competitor_name || row.home_team || 'Home',
-        awayTeam: row.away_competitor_name || row.away_team || 'Away',
-        homeTeamCode: (row.home_team_code || row.home_competitor_name?.slice(0, 3) || 'KC').toUpperCase(),
-        awayTeamCode: (row.away_team_code || row.away_competitor_name?.slice(0, 3) || 'BUF').toUpperCase(),
-        status: isScheduled ? 'upcoming' : (isFinal ? 'final' : 'live'),
-        periodLabel: periodLabel || (isScheduled ? '1:00 PM EDT' : 'LIVE'),
-        homeScore: isScheduled ? 0 : Number(row.home_score || 0),
-        awayScore: isScheduled ? 0 : Number(row.away_score || 0),
-        recentEvent: row.recent_event,
+        homeTeam: getTeamFullName(homeCode),
+        awayTeam: getTeamFullName(awayCode),
+        homeTeamCode: homeCode,
+        awayTeamCode: awayCode,
+        home_team: homeCode,
+        away_team: awayCode,
+        home_score: homeScore,
+        away_score: awayScore,
+        quarter_time: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
+        quarterTime: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
+        status: isFinal ? 'final' : isLive ? 'live' : 'upcoming',
+        periodLabel: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
+        homeScore,
+        awayScore,
       };
     });
   } catch (err) {
-    console.warn('⚡ Live Supabase matches fetch encountered error:', err);
-    return LIVE_MATCHES;
+    console.warn('⚡ Live Supabase matches fetch encountered exception:', err);
+    return [];
   }
 }
 

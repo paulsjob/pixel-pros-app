@@ -5,6 +5,7 @@ import { PixelHelmetIcon } from './PixelBadges';
 import { RoomSetupBar } from './RoomSetupBar';
 import { Sparkles, X, Lock } from 'lucide-react';
 import { splitPlayerFirstLastName } from '../utils/formatters';
+import { formatRealtimeGameSituation } from '../utils/teamData';
 
 interface MyTeamViewProps {
   slots: SquadSlots;
@@ -95,24 +96,27 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               ? splitPlayerFirstLastName(player.displayName)
               : { firstName: '', lastName: '' };
 
-            const playerTeam = (player?.teamCode || '').toUpperCase();
+            const playerTeam = (player?.teamCode || '').trim().toUpperCase();
             const playerMatch = player
               ? (matches || []).find((m) => {
-                  return (
-                    m.homeTeamCode.toUpperCase() === playerTeam ||
-                    m.awayTeamCode.toUpperCase() === playerTeam
-                  );
+                  const h = (m.homeTeamCode || m.home_team || '').trim().toUpperCase();
+                  const a = (m.awayTeamCode || m.away_team || '').trim().toUpperCase();
+                  return h === playerTeam || a === playerTeam;
                 })
               : null;
 
             const isGameLive =
               playerMatch &&
               (playerMatch.status === 'live' ||
-                (playerMatch.periodLabel && playerMatch.periodLabel.startsWith('Q')));
+                (playerMatch.periodLabel && (playerMatch.periodLabel.includes('Q') || playerMatch.periodLabel.includes('th') || playerMatch.periodLabel.includes('1st') || playerMatch.periodLabel.includes('2nd') || playerMatch.periodLabel.includes('3rd') || playerMatch.periodLabel.includes('Half'))));
 
-            const gameSituation = playerMatch
-              ? `${playerMatch.periodLabel || 'LIVE'} · ${playerMatch.awayTeamCode} ${playerMatch.awayScore} - ${playerMatch.homeTeamCode} ${playerMatch.homeScore}`
-              : null;
+            const isGameFinal =
+              playerMatch &&
+              (playerMatch.status === 'final' ||
+                (playerMatch.periodLabel && playerMatch.periodLabel.toLowerCase().includes('final')) ||
+                (playerMatch.quarter_time && playerMatch.quarter_time.toLowerCase().includes('final')));
+
+            const gameSituation = playerMatch ? formatRealtimeGameSituation(playerMatch) : null;
 
             const passYds = Number(
               player?.stats?.pass_yds ??
@@ -217,28 +221,36 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Live Game Situation pill from matches e.g. "Q3 08:42 · BUF 24 - HOU 21" */}
-                    {isGameLive && gameSituation ? (
-                      <div className="w-full mt-1 py-1 px-1.5 bg-[#fef3c7] border border-[#f59e0b] rounded-xs text-center shadow-2xs">
-                        <div className="font-pixel text-[9px] sm:text-[10px] text-[#92400e] font-bold flex items-center justify-center gap-1.5 whitespace-nowrap">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-ping shrink-0" />
+                    {/* Real-Time Game Situation pill from matches record e.g. "Final · BUF 36 - HOU 31" or "Q4 · BUF 30 - HOU 28" */}
+                    {gameSituation ? (
+                      <div className={`w-full mt-1 py-1 px-1.5 border rounded-xs text-center shadow-2xs ${
+                        isGameLive
+                          ? 'bg-[#fef3c7] border-[#f59e0b]'
+                          : isGameFinal
+                          ? 'bg-[#e2e8f0] border-[#94a3b8]'
+                          : 'bg-[#fae9c8] border-[#d4a86a]'
+                      }`}>
+                        <div className={`font-pixel text-[9px] sm:text-[10px] font-bold flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                          isGameLive
+                            ? 'text-[#92400e]'
+                            : isGameFinal
+                            ? 'text-[#334155]'
+                            : 'text-[#784610]'
+                        }`}>
+                          {isGameLive && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a] animate-ping shrink-0" />
+                          )}
                           <span className="truncate">{gameSituation}</span>
-                        </div>
-                      </div>
-                    ) : playerMatch && playerMatch.status === 'upcoming' ? (
-                      <div className="w-full mt-1 py-1 px-1.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs text-center">
-                        <div className="font-pixel text-[8px] sm:text-[9px] text-[#784610] truncate">
-                          {playerMatch.periodLabel} · vs {playerMatch.homeTeamCode === player.teamCode ? playerMatch.awayTeamCode : playerMatch.homeTeamCode}
                         </div>
                       </div>
                     ) : null}
 
-                    {/* Direct Live Stats on Card (e.g. 3 TD · 225 YDS) */}
+                    {/* Direct Live Stats on Card (e.g. 4 TD · 358 YDS) */}
                     <div className="w-full mt-1.5 py-1 px-2 bg-[#fae5b8]/80 border border-[#c99a57] rounded-xs text-center">
                       <div className="font-pixel text-[10px] sm:text-[11px] text-[#5c3509] font-bold whitespace-nowrap">
                         {tds > 0 || totalYds > 0
                           ? `${tds} TD · ${totalYds} YDS`
-                          : (isGameLive && gameSituation ? gameSituation : 'LIVE')}
+                          : '0 TD · 0 YDS'}
                       </div>
                     </div>
 
