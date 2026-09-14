@@ -12,6 +12,8 @@ interface FamilySquadSwitcherProps {
   }>;
   onSelectSquad: (squadName: string) => void;
   onCreateSquad: (squadName: string) => void;
+  onDeleteSquad?: (squadName: string) => void;
+  onOpenRoomModal?: () => void;
 }
 
 export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
@@ -20,10 +22,13 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
   squads,
   onSelectSquad,
   onCreateSquad,
+  onDeleteSquad,
+  onOpenRoomModal,
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newSquadName, setNewSquadName] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [squadToDrop, setSquadToDrop] = useState<string | null>(null);
 
   // Normalize active user name for clean comparison
   const normalizedActive = (activeUserName || 'DAD').trim().toUpperCase();
@@ -90,12 +95,27 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 w-full py-1 sm:py-1.5 box-border">
         <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
           
-          {/* Left Label: 🛋️ SQUADS: */}
+          {/* Left: Mobile Room Code Button (< sm) or Desktop SQUADS: Label (>= sm) */}
           <div className="flex items-center gap-1.5 shrink-0 select-none">
-            <span className="text-xs sm:text-sm">🛋️</span>
-            <span className="font-pixel text-[10px] sm:text-xs text-[#38bdf8] whitespace-nowrap font-bold">
-              SQUADS:
-            </span>
+            {/* Mobile: Interactive Room Badge */}
+            <button
+              type="button"
+              onClick={onOpenRoomModal}
+              className="sm:hidden touch-manipulation flex items-center gap-1 px-1.5 py-0.5 bg-[#15233d] hover:bg-[#1f345b] border border-[#38bdf8]/50 hover:border-[#38bdf8] text-[#fae5b8] rounded-2xs font-pixel text-[9px] font-bold whitespace-nowrap active:translate-y-0.5 cursor-pointer shadow-2xs"
+              title="Tap to switch room"
+            >
+              <span className="text-xs">🛋️</span>
+              <span className="text-[#f59e0b] font-bold">{roomCode}</span>
+              <span className="text-[8px] text-[#94a3b8]">✏️</span>
+            </button>
+
+            {/* Desktop: 🛋️ SQUADS: */}
+            <div className="hidden sm:flex items-center gap-1.5 shrink-0 select-none">
+              <span className="text-sm">🛋️</span>
+              <span className="font-pixel text-xs text-[#38bdf8] whitespace-nowrap font-bold">
+                SQUADS:
+              </span>
+            </div>
           </div>
 
         {/* Squad Pills List & [+ ADD] Action - Smooth Horizontal Scroll */}
@@ -151,6 +171,22 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
                 >
                   {scoreVal}p
                 </span>
+
+                {/* [×] Drop Squad button when squad is active and NOT locked */}
+                {isActive && !squad.isLocked && onDeleteSquad && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSquadToDrop(squad.userName);
+                    }}
+                    className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center text-[#fae5b8]/70 hover:text-white hover:bg-red-600 rounded-2xs cursor-pointer active:scale-90 transition-colors"
+                    title={`Drop squad ${squad.userName} from room`}
+                  >
+                    <X size={10} strokeWidth={3} />
+                  </span>
+                )}
               </button>
             );
           })}
@@ -176,71 +212,118 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
         </div>
       </div>
 
-      {/* Add Squad Inline Prompt Modal / Bar */}
+      {/* Add Squad Drawer (Fixed bottom, keyboard-safe) */}
       {isAdding && (
-        <div className="mt-2 pt-2 border-t border-[#1a264a] animate-in fade-in slide-in-from-top-1 duration-150">
-          <form
-            onSubmit={handleCommitNewSquad}
-            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-[#0c142b] p-2 sm:p-2.5 border-2 border-[#2563eb] rounded-xs shadow-md"
-          >
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto min-w-0">
-              <label htmlFor="new-squad-name-input" className="font-pixel text-[10px] sm:text-xs text-[#38bdf8] whitespace-nowrap">
-                NEW SQUAD NAME:
-              </label>
-              <input
-                id="new-squad-name-input"
-                type="text"
-                autoFocus
-                value={newSquadName}
-                onChange={(e) => {
-                  setNewSquadName(e.target.value.toUpperCase());
-                  setErrorMsg(null);
-                }}
-                placeholder="e.g. MOM or LEO"
-                maxLength={14}
-                className="bg-[#1a2238] border-2 border-[#38bdf8] text-[#fae5b8] font-pixel text-[11px] sm:text-xs px-2.5 py-1 rounded-2xs focus:outline-none w-full sm:w-36 uppercase placeholder:text-gray-500"
-              />
-              
-              {/* Quick suggestions pills */}
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap py-0.5 w-full sm:w-auto">
-                <span className="font-pixel text-[9px] text-[#64748b] shrink-0">QUICK:</span>
-                {quickFamilySuggestions.map((sug) => (
-                  <button
-                    key={sug}
-                    type="button"
-                    onClick={() => setNewSquadName(sug)}
-                    className="touch-manipulation font-pixel text-[9px] px-1.5 py-0.5 bg-[#1a2238] hover:bg-[#232e4b] text-[#94a3b8] hover:text-[#fae5b8] border border-[#273552] rounded-2xs cursor-pointer shrink-0 whitespace-nowrap"
-                  >
-                    {sug}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <>
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-2xs z-40"
+            onClick={handleCancelAdd}
+          />
+          
+          <div className="fixed inset-x-0 bottom-0 z-50 p-3.5 bg-[#0d1527] border-t-2 border-[#1e293b] shadow-[0_-8px_20px_rgba(0,0,0,0.8)] animate-in slide-in-from-bottom duration-200 box-border">
+            <div className="max-w-md mx-auto w-full">
+              <form onSubmit={handleCommitNewSquad}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-pixel text-[11px] sm:text-xs text-[#38bdf8] font-bold tracking-wider">
+                    NEW FAMILY SQUAD
+                  </span>
+                  <span className="font-pixel text-[9px] text-[#94a3b8]">
+                    ROOM: {roomCode}
+                  </span>
+                </div>
 
-            {/* Action Buttons: Cancel and Create side-by-side on mobile */}
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-1.5 w-full sm:w-auto justify-end mt-1 sm:mt-0">
+                <input
+                  id="new-squad-name-input"
+                  type="text"
+                  autoFocus
+                  value={newSquadName}
+                  onChange={(e) => {
+                    setNewSquadName(e.target.value.toUpperCase());
+                    setErrorMsg(null);
+                  }}
+                  placeholder="e.g. MOM or LEO"
+                  maxLength={14}
+                  className="bg-[#1a2238] border-2 border-[#38bdf8] text-[#fae5b8] font-pixel text-xs px-3 py-2 rounded-xs focus:outline-none w-full uppercase placeholder:text-gray-500 mb-2 box-border"
+                />
+
+                {/* Quick family names row */}
+                <div className="flex overflow-x-auto whitespace-nowrap gap-1.5 py-1 no-scrollbar mb-2 touch-pan-x">
+                  <span className="font-pixel text-[9px] text-[#64748b] self-center shrink-0">QUICK:</span>
+                  {quickFamilySuggestions.map((sug) => (
+                    <button
+                      key={sug}
+                      type="button"
+                      onClick={() => setNewSquadName(sug)}
+                      className="touch-manipulation font-pixel text-[9px] px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] text-[#94a3b8] hover:text-[#fae5b8] border border-[#273552] rounded-2xs cursor-pointer shrink-0 whitespace-nowrap"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Action Buttons: 2-column grid */}
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelAdd}
+                    className="touch-manipulation py-2 bg-[#334155] hover:bg-[#475569] text-white border border-[#1e293b] font-pixel text-xs rounded-xs cursor-pointer active:translate-y-0.5 text-center"
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    type="submit"
+                    className="touch-manipulation py-2 bg-[#16a34a] hover:bg-[#22c55e] text-white border border-[#14532d] font-pixel text-xs rounded-xs cursor-pointer shadow-sm active:translate-y-0.5 font-bold flex items-center justify-center gap-1.5 text-center whitespace-nowrap"
+                  >
+                    <Check size={14} />
+                    <span>✓ CREATE</span>
+                  </button>
+                </div>
+              </form>
+
+              {errorMsg && (
+                <div className="mt-2 flex items-center gap-1.5 text-[#f87171] font-retro text-xs">
+                  <ShieldAlert size={14} />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Drop Squad Confirmation Modal */}
+      {squadToDrop && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-2xs">
+          <div className="pixel-box-cream p-4 max-w-xs w-full border-4 border-[#1a2238] shadow-[0_6px_0_0_#0a0f1d] rounded-xs text-center">
+            <div className="font-pixel text-xs sm:text-sm text-[#991b1b] mb-2 font-bold flex items-center justify-center gap-1.5">
+              <span>⚠️</span>
+              <span>DROP SQUAD?</span>
+            </div>
+            <p className="font-retro text-xs text-[#5c3509] mb-4">
+              Drop squad <strong className="font-pixel text-[#12579b]">{squadToDrop}</strong> from room <strong className="font-pixel text-[#f59e0b]">{roomCode}</strong>?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={handleCancelAdd}
-                className="touch-manipulation px-2.5 py-1.5 sm:py-1 bg-[#334155] hover:bg-[#475569] text-white border border-[#1e293b] font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5 text-center"
+                onClick={() => setSquadToDrop(null)}
+                className="touch-manipulation py-1.5 bg-[#475569] hover:bg-[#64748b] text-white font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5"
               >
                 CANCEL
               </button>
               <button
-                type="submit"
-                className="touch-manipulation px-3 py-1.5 sm:py-1 bg-[#16a34a] hover:bg-[#22c55e] text-white border border-[#14532d] font-pixel text-[10px] rounded-2xs cursor-pointer shadow-sm active:translate-y-0.5 font-bold flex items-center justify-center gap-1 text-center whitespace-nowrap"
+                type="button"
+                onClick={() => {
+                  const target = squadToDrop;
+                  setSquadToDrop(null);
+                  onDeleteSquad?.(target);
+                }}
+                className="touch-manipulation py-1.5 bg-[#dc2626] hover:bg-[#ef4444] text-white font-pixel text-[10px] rounded-2xs cursor-pointer font-bold active:translate-y-0.5"
               >
-                <Check size={11} />
-                <span>CREATE SQUAD</span>
+                DROP SQUAD
               </button>
             </div>
-          </form>
-          {errorMsg && (
-            <div className="mt-1 flex items-center gap-1 text-[#f87171] font-retro text-xs">
-              <ShieldAlert size={12} />
-              <span>{errorMsg}</span>
-            </div>
-          )}
+          </div>
         </div>
       )}
       </div>

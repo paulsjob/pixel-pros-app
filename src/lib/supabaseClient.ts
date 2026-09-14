@@ -356,6 +356,41 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
 }
 
 /**
+ * Deletes a squad/user_roster entry from Supabase and local cache.
+ */
+export async function deleteUserRoster(roomCode: string, userName: string): Promise<boolean> {
+  const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+  const cleanName = (userName || '').trim().toUpperCase();
+  if (!cleanName) return false;
+
+  try {
+    // 1. Remove from localStorage cache
+    const localKey = `pixel_pros_rosters_${cleanRoom}`;
+    const raw = localStorage.getItem(localKey);
+    if (raw) {
+      const rosters: UserRoster[] = JSON.parse(raw);
+      const filtered = rosters.filter((r) => r.user_name.toUpperCase() !== cleanName);
+      localStorage.setItem(localKey, JSON.stringify(filtered));
+    }
+    localStorage.removeItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`);
+    localStorage.removeItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`);
+
+    // 2. Delete from Supabase
+    await supabase
+      .from('user_rosters')
+      .delete()
+      .eq('room_code', cleanRoom)
+      .eq('user_name', cleanName);
+
+    window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: { room_code: cleanRoom, user_name: cleanName, deleted: true } }));
+    return true;
+  } catch (err) {
+    console.warn('deleteUserRoster error:', err);
+    return false;
+  }
+}
+
+/**
  * Subscribes to Realtime Postgres changes specifically for a room's user_rosters.
  * Instant zero-lag sync across multiple devices in the room.
  */

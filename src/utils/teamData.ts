@@ -158,18 +158,27 @@ export function formatRealtimeGameSituationCompact(match: {
       rawTime.includes('4th'));
 
   let statusLine = 'LIVE';
-  let scoreLine = `${away} ${aScore} - ${home} ${hScore}`;
+  let scoreLine = `${away} ${aScore}-${hScore}`;
 
   if (isFinal) {
     statusLine = 'FINAL';
-    scoreLine = `${away} ${aScore} - ${home} ${hScore}`;
+    scoreLine = `${away} ${aScore}-${hScore}`;
   } else if (isLive) {
-    const timeDisplay = rawTime && !rawTime.toLowerCase().includes('live') ? rawTime : '';
-    statusLine = timeDisplay ? `🔴 LIVE · ${timeDisplay}` : '🔴 LIVE';
-    scoreLine = `${away} ${aScore} - ${home} ${hScore}`;
+    let qLabel = 'LIVE';
+    if (rawTime.includes('1st') || rawTime.includes('Q1')) qLabel = 'Q1';
+    else if (rawTime.includes('2nd') || rawTime.includes('Q2')) qLabel = 'Q2';
+    else if (rawTime.includes('3rd') || rawTime.includes('Q3')) qLabel = 'Q3';
+    else if (rawTime.includes('4th') || rawTime.includes('Q4')) qLabel = 'Q4';
+    else if (rawTime.toLowerCase().includes('half')) qLabel = 'HALF';
+    else if (rawTime.includes('OT')) qLabel = 'OT';
+    else if (rawTime && !rawTime.toLowerCase().includes('live')) qLabel = rawTime;
+
+    statusLine = `🔴 ${qLabel}`;
+    scoreLine = `${away} ${aScore}-${hScore}`;
   } else {
-    // Scheduled / upcoming
-    const kickoff = rawTime || 'SUN 4:25 PM';
+    // Scheduled / upcoming e.g. SUN 4:25P · WSH @ PHI
+    let kickoff = rawTime || 'SUN 4:25P';
+    kickoff = kickoff.replace(/\s*PM/i, 'P').replace(/\s*AM/i, 'A');
     statusLine = kickoff;
     scoreLine = `${away} @ ${home}`;
   }

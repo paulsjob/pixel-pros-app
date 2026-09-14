@@ -54,34 +54,37 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
       {/* Outer Card Container */}
-      <div className="relative w-full max-w-md bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-3.5 sm:p-5 rounded-xs my-auto max-h-[90vh] flex flex-col justify-between overflow-y-auto box-border">
+      <div className="inspector-modal w-[92vw] max-w-[440px] mx-auto box-border overflow-x-hidden relative p-3.5 sm:p-4 bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] rounded-xs my-auto max-h-[90vh] flex flex-col justify-between overflow-y-auto">
         
-        {/* Red Close Button */}
-        <button
-          onClick={onClose}
-          className="touch-manipulation absolute -top-3 -right-3 w-8 h-8 sm:w-9 sm:h-9 bg-[#b91c1c] text-[#fae5b8] border-2 border-[#1a2238] flex items-center justify-center cursor-pointer shadow-[0_3px_0_0_#450a0a] active:translate-y-1 active:shadow-none transition-all font-pixel text-xs z-10"
-          title="Cancel / Close Card"
-        >
-          <X size={16} strokeWidth={3} />
-        </button>
-
-        {/* Title: Authentic Player Name & Team / Number */}
-        <div className="text-center mb-2 sm:mb-3 pb-2 sm:pb-2.5 border-b-2 border-[#e2ba7d] shrink-0">
-          <h2 className="font-pixel text-lg sm:text-2xl text-[#5c3509] tracking-wider uppercase leading-tight">
-            {selectedPlayer.displayName}
-          </h2>
-          <div className="text-[11px] sm:text-xs font-retro text-[#784610] mt-1 flex items-center justify-center gap-1.5 sm:gap-2">
-            <span className="px-1.5 sm:px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] text-[#12579b] font-pixel text-[9px] sm:text-[10px] font-bold rounded-2xs">
-              {selectedPlayer.teamCode}
-            </span>
-            <span className="font-bold truncate max-w-[120px] sm:max-w-none">{selectedPlayer.teamName}</span>
-            <span>•</span>
-            <span className="font-pixel text-[10px] sm:text-[11px] text-[#451a03]">#{selectedPlayer.uniformNumber}</span>
-            <span>•</span>
-            <span className="px-1.5 py-0.5 bg-[#ebd2a4] border border-[#c99a57] font-pixel text-[9px] text-[#5c3509] rounded-2xs font-bold">
-              {selectedPlayer.position || 'STAR'}
-            </span>
+        {/* Modal Header: Authentic Player Name & Team / Number with Close [X] Button */}
+        <div className="modal-header flex justify-between items-start w-full mb-2 sm:mb-3 pb-2 sm:pb-2.5 border-b-2 border-[#e2ba7d] shrink-0">
+          <div className="text-left flex-1 min-w-0 pr-2">
+            <h2 className="font-pixel text-lg sm:text-2xl text-[#5c3509] tracking-wider uppercase leading-tight truncate">
+              {selectedPlayer.displayName}
+            </h2>
+            <div className="text-[11px] sm:text-xs font-retro text-[#784610] mt-1 flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <span className="px-1.5 sm:px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] text-[#12579b] font-pixel text-[9px] sm:text-[10px] font-bold rounded-2xs shrink-0">
+                {selectedPlayer.teamCode}
+              </span>
+              <span className="font-bold truncate max-w-[120px] sm:max-w-none">{selectedPlayer.teamName}</span>
+              <span>•</span>
+              <span className="font-pixel text-[10px] sm:text-[11px] text-[#451a03] shrink-0">#{selectedPlayer.uniformNumber}</span>
+              <span>•</span>
+              <span className="px-1.5 py-0.5 bg-[#ebd2a4] border border-[#c99a57] font-pixel text-[9px] text-[#5c3509] rounded-2xs font-bold shrink-0">
+                {selectedPlayer.position || 'STAR'}
+              </span>
+            </div>
           </div>
+
+          {/* Red Close Button Inside Header - No Negative Offsets */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="touch-manipulation shrink-0 w-8 h-8 sm:w-9 sm:h-9 bg-[#b91c1c] hover:bg-[#dc2626] text-[#fae5b8] border-2 border-[#1a2238] flex items-center justify-center cursor-pointer shadow-[0_2px_0_0_#450a0a] active:translate-y-0.5 transition-all font-pixel text-xs rounded-2xs"
+            title="Cancel / Close Card"
+          >
+            <X size={16} strokeWidth={3} />
+          </button>
         </div>
 
         {/* Clean Athlete Presentation: Sprite + Live Score */}
@@ -131,44 +134,44 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
         </div>
 
         {/* In-Game Raw Stats Boxes */}
-        <div className="mt-3">
-          <div className="grid grid-cols-4 gap-1.5 text-center">
+        <div className="mt-2.5 sm:mt-3 w-full box-border">
+          <div className="grid grid-cols-4 gap-1 w-full box-border text-center">
             {/* Pass Yards Box */}
-            <div className="p-1.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs">
-              <span className="block font-retro text-[9px] text-[#784610] uppercase tracking-wider font-bold">
+            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
                 PASS YDS
               </span>
-              <span className="font-pixel text-sm sm:text-base text-[#5c3509]">
+              <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">
                 {passYds}
               </span>
             </div>
 
             {/* Rush Yards Box */}
-            <div className="p-1.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs">
-              <span className="block font-retro text-[9px] text-[#784610] uppercase tracking-wider font-bold">
+            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
                 RUSH YDS
               </span>
-              <span className="font-pixel text-sm sm:text-base text-[#5c3509]">
+              <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">
                 {rushYds}
               </span>
             </div>
 
             {/* Rec Yards Box */}
-            <div className="p-1.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs">
-              <span className="block font-retro text-[9px] text-[#784610] uppercase tracking-wider font-bold">
+            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
                 REC YDS
               </span>
-              <span className="font-pixel text-sm sm:text-base text-[#5c3509]">
+              <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">
                 {recYds}
               </span>
             </div>
 
             {/* Touchdowns Box */}
-            <div className="p-1.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs">
-              <span className="block font-retro text-[9px] text-[#784610] uppercase tracking-wider font-bold">
-                TOUCHDOWNS
+            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
+                TD
               </span>
-              <span className="font-pixel text-sm sm:text-base text-[#b45309] font-bold">
+              <span className="font-pixel text-xs sm:text-base text-[#b45309] font-bold truncate">
                 {tds}
               </span>
             </div>

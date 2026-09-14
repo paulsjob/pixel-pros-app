@@ -10,6 +10,7 @@ import {
   fetchLiveNFLMatches,
   upsertUserRoster,
   fetchRoomRosters,
+  deleteUserRoster,
   isGhostUser,
 } from './lib/supabaseClient';
 import { getDeviceId } from './lib/deviceIdentity';
@@ -199,8 +200,41 @@ export default function App() {
     showToast(`★ Created squad "${cleanName}" in Room ${normalizedRoom}! Draft your 3 Stars.`);
   };
 
+  // 🗑️ Drop squad from room
+  const handleDeleteSquad = async (targetUserName: string) => {
+    const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+    const cleanName = (targetUserName || '').trim().toUpperCase();
+    if (!cleanName) return;
+
+    await deleteUserRoster(cleanRoom, cleanName);
+
+    // Immediately update local rosters state so squad vanishes from switcher and leaderboard
+    setRoomRosters((prev) =>
+      prev.filter(
+        (r) => !(r.room_code.toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName)
+      )
+    );
+
+    // If active squad was dropped, switch to another squad in the room
+    if (userName.toUpperCase() === cleanName) {
+      const remaining = roomRosters.filter(
+        (r) => r.room_code.toUpperCase() === cleanRoom && r.user_name.toUpperCase() !== cleanName
+      );
+      const nextName = remaining.length > 0 ? remaining[0].user_name.toUpperCase() : 'DAD';
+      setUserName(nextName);
+      try {
+        localStorage.setItem('pixel_pros_user_name', nextName);
+      } catch {
+        // ignore
+      }
+      handleSelectSquad(nextName);
+    }
+
+    showToast(`🗑️ Dropped squad "${cleanName}" from room.`);
+  };
+
   // Switch Room Code: Forces immediate sync and re-fetch of room rosters
-  const handleCommitRoomCode = async (newCode: string) => {
+  const handleCommitRoomCode = (newCode: string) => {
     const clean = (newCode || 'COUCH').trim().toUpperCase();
     setRoomCode(clean);
     try {
@@ -208,64 +242,7 @@ export default function App() {
     } catch {
       // ignore
     }
-
-    // 1. Immediately fetch rosters for the newly entered room from Supabase
-    const freshRosters = await fetchRoomRosters(clean);
-    setRoomRosters(freshRosters);
-
-    // 2. Cross-Device Persistence (The Apple Store Demo Test):
-    // Check if the current user already has a lineup in this room
-    const currentName = (userName || 'DAD').trim().toUpperCase();
-    const existingSquad = freshRosters.find((r) => r.user_name.toUpperCase() === currentName);
-
-    if (existingSquad) {
-      const s1 = roster.find((p) => p.id === existingSquad.star_1_id) || null;
-      const s2 = roster.find((p) => p.id === existingSquad.star_2_id) || null;
-      const s3 = roster.find((p) => p.id === existingSquad.star_3_id) || null;
-      const roomLocked = Boolean(
-        existingSquad.is_locked ||
-        existingSquad.device_id === 'LOCKED' ||
-        localStorage.getItem(`pixel_pros_picks_locked_${clean}_${currentName}`) === 'true'
-      );
-      setSquadSlots({ star1: s1, star2: s2, star3: s3 });
-      setIsLocked(roomLocked);
-      showToast(`Loaded ${currentName}'s squad from Room ${clean}`);
-    } else if (freshRosters.length > 0) {
-      // If room already has other family squads (e.g. DAD, LEO, VIOLET), select the first squad and hydrate
-      const firstSquad = freshRosters[0];
-      const firstSquadName = firstSquad.user_name.toUpperCase();
-      setUserName(firstSquadName);
-      try {
-        localStorage.setItem('pixel_pros_user_name', firstSquadName);
-      } catch {
-        // ignore
-      }
-      const s1 = roster.find((p) => p.id === firstSquad.star_1_id) || null;
-      const s2 = roster.find((p) => p.id === firstSquad.star_2_id) || null;
-      const s3 = roster.find((p) => p.id === firstSquad.star_3_id) || null;
-      const roomLocked = Boolean(
-        firstSquad.is_locked ||
-        firstSquad.device_id === 'LOCKED' ||
-        localStorage.getItem(`pixel_pros_picks_locked_${clean}_${firstSquadName}`) === 'true'
-      );
-      setSquadSlots({ star1: s1, star2: s2, star3: s3 });
-      setIsLocked(roomLocked);
-      showToast(`Joined Room ${clean} as ${firstSquadName}`);
-    } else {
-      // Room is empty or newly created
-      let loadedSlots = { star1: null, star2: null, star3: null };
-      if (clean === 'COUCH') {
-        loadedSlots = {
-          star1: roster.find((p) => p.displayName.toLowerCase().includes('josh allen')) || roster[0] || null,
-          star2: roster.find((p) => p.displayName.toLowerCase().includes('derrick henry')) || roster[1] || null,
-          star3: roster.find((p) => p.displayName.toLowerCase().includes('ceedee lamb')) || roster[2] || null,
-        };
-      }
-      setSquadSlots(loadedSlots);
-      setIsLocked(false);
-      await syncLineupToSupabase(clean, currentName, loadedSlots, false);
-      showToast(`Joined Room "${clean}"`);
-    }
+    showToast(`🛋️ Room ${clean} synced!`);
   };
 
   // Commit User Name
@@ -353,81 +330,83 @@ export default function App() {
     }
   };
 
-  // 🏈 Live Data Hookup: Fetch real NFL athletes & real games directly from Supabase
+  // 🏈 Initial Room Sync: Fetches competitors, matches, and room rosters in parallel (Mount & Room change only)
   useEffect(() => {
-    let isMounted = true;
-    async function loadLiveSupabaseData() {
+    let active = true;
+    async function sync() {
       try {
-        const [athletes, liveMatches, initialRosters] = await Promise.all([
+        const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+        const cleanName = (userName || 'DAD').trim().toUpperCase();
+
+        const [comp, match, rost] = await Promise.all([
           fetchLiveNFLCompetitors(),
           fetchLiveNFLMatches(),
-          fetchRoomRosters(roomCode),
+          fetchRoomRosters(cleanRoom),
         ]);
-        if (isMounted) {
-          if (athletes && athletes.length > 0) {
-            setRoster(athletes);
-            // Re-sync active squad objects with live scores or restore from Supabase/saved room picks
-            const activeRoom = (localStorage.getItem('pixel_pros_room_code') || 'COUCH').trim().toUpperCase();
-            const activeName = (localStorage.getItem('pixel_pros_user_name') || 'DAD').trim().toUpperCase();
 
-            // 1. Check if Supabase already has a squad record for (activeRoom, activeName)
-            const dbRoster = (initialRosters || []).find(
-              (r) => (r.room_code || '').toUpperCase() === activeRoom && r.user_name.toUpperCase() === activeName
-            );
+        if (!active) return;
 
-            let s1: Competitor | null = null;
-            let s2: Competitor | null = null;
-            let s3: Competitor | null = null;
-            let initialLock = false;
+        if (comp && comp.length > 0) {
+          setRoster(comp);
+        }
+        if (match && match.length > 0) {
+          setMatches(match);
+        }
+        if (rost) {
+          setRoomRosters(rost);
+        }
 
-            if (dbRoster) {
-              s1 = athletes.find((a) => a.id === dbRoster.star_1_id) || null;
-              s2 = athletes.find((a) => a.id === dbRoster.star_2_id) || null;
-              s3 = athletes.find((a) => a.id === dbRoster.star_3_id) || null;
-              initialLock = Boolean(dbRoster.is_locked || dbRoster.device_id === 'LOCKED');
-            } else {
-              // 2. Check localStorage cache for this squad
-              const saved =
-                localStorage.getItem(`pixel_pros_roster_${activeRoom}_${activeName}`) ||
-                localStorage.getItem(`pixel_pros_roster_${activeRoom}`);
-              if (saved) {
-                try {
-                  const ids: string[] = JSON.parse(saved);
-                  if (Array.isArray(ids)) {
-                    s1 = athletes.find((a) => a.id === ids[0] || a.shortName.toLowerCase() === ids[0]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[0]?.toLowerCase())) || null;
-                    s2 = athletes.find((a) => a.id === ids[1] || a.shortName.toLowerCase() === ids[1]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[1]?.toLowerCase())) || null;
-                    s3 = athletes.find((a) => a.id === ids[2] || a.shortName.toLowerCase() === ids[2]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[2]?.toLowerCase())) || null;
-                  }
-                } catch {
-                  // ignore
-                }
+        const athleteList = comp && comp.length > 0 ? comp : [];
+        const dbRoster = (rost || []).find(
+          (r) => (r.room_code || '').toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName
+        );
+
+        let s1: Competitor | null = null;
+        let s2: Competitor | null = null;
+        let s3: Competitor | null = null;
+        let initialLock = false;
+
+        if (dbRoster) {
+          s1 = athleteList.find((a) => a.id === dbRoster.star_1_id) || null;
+          s2 = athleteList.find((a) => a.id === dbRoster.star_2_id) || null;
+          s3 = athleteList.find((a) => a.id === dbRoster.star_3_id) || null;
+          initialLock = Boolean(dbRoster.is_locked || dbRoster.device_id === 'LOCKED');
+        } else {
+          try {
+            const saved =
+              localStorage.getItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`) ||
+              localStorage.getItem(`pixel_pros_roster_${cleanRoom}`);
+            if (saved) {
+              const ids: string[] = JSON.parse(saved);
+              if (Array.isArray(ids)) {
+                s1 = athleteList.find((a) => a.id === ids[0] || a.shortName.toLowerCase() === ids[0]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[0]?.toLowerCase())) || null;
+                s2 = athleteList.find((a) => a.id === ids[1] || a.shortName.toLowerCase() === ids[1]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[1]?.toLowerCase())) || null;
+                s3 = athleteList.find((a) => a.id === ids[2] || a.shortName.toLowerCase() === ids[2]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[2]?.toLowerCase())) || null;
               }
-              initialLock = localStorage.getItem(`pixel_pros_picks_locked_${activeRoom}_${activeName}`) === 'true';
             }
-
-            if (!s1 && !s2 && !s3 && activeRoom === 'COUCH') {
-              s1 = athletes.find((a) => a.displayName.toLowerCase().includes('josh allen')) || athletes[0] || null;
-              s2 = athletes.find((a) => a.displayName.toLowerCase().includes('derrick henry')) || athletes[1] || null;
-              s3 = athletes.find((a) => a.displayName.toLowerCase().includes('ceedee lamb')) || athletes.find((a) => a.displayName.toLowerCase().includes('mahomes')) || athletes[2] || null;
-            }
-
-            setSquadSlots({ star1: s1, star2: s2, star3: s3 });
-            setIsLocked(initialLock);
-          }
-          if (liveMatches && liveMatches.length > 0) {
-            setMatches(liveMatches);
-          }
-          if (initialRosters) {
-            setRoomRosters(initialRosters);
+            initialLock = localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`) === 'true';
+          } catch {
+            // ignore
           }
         }
+
+        if (!s1 && !s2 && !s3 && cleanRoom === 'COUCH' && athleteList.length >= 3) {
+          s1 = athleteList.find((a) => a.displayName.toLowerCase().includes('josh allen')) || athleteList[0] || null;
+          s2 = athleteList.find((a) => a.displayName.toLowerCase().includes('derrick henry')) || athleteList[1] || null;
+          s3 = athleteList.find((a) => a.displayName.toLowerCase().includes('ceedee lamb')) || athleteList.find((a) => a.displayName.toLowerCase().includes('mahomes')) || athleteList[2] || null;
+        }
+
+        const filledCount = [s1, s2, s3].filter(Boolean).length;
+        setSquadSlots({ star1: s1, star2: s2, star3: s3 });
+        setIsLocked(filledCount === 3 && initialLock);
       } catch (err) {
-        console.warn('Live Supabase data initialization:', err);
+        console.warn('⚡ Room sync error:', err);
       }
     }
-    loadLiveSupabaseData();
+
+    sync();
     return () => {
-      isMounted = false;
+      active = false;
     };
   }, [roomCode]);
 
@@ -558,11 +537,6 @@ export default function App() {
   // ⚡ Dedicated Realtime Room Channel: Teardown previous channel and subscribe to new channel for this normalized room
   useEffect(() => {
     const normalizedRoom = (roomCode || 'COUCH').trim().toUpperCase();
-
-    // Immediately fetch room rosters
-    fetchRoomRosters(normalizedRoom).then((rosters) => {
-      setRoomRosters(rosters);
-    });
 
     const unsubscribeRoom = subscribeToRoomRosters(normalizedRoom, async () => {
       const fresh = await fetchRoomRosters(normalizedRoom);
@@ -706,7 +680,7 @@ export default function App() {
               </button>
             </nav>
 
-            {/* Right: ROOM: CUSE001 (tap to switch room) and (?) Rules icon */}
+            {/* Right: ROOM: CUSE001 (tap to switch room on desktop) and (?) Rules icon */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               <button
                 type="button"
@@ -714,7 +688,7 @@ export default function App() {
                   setTempRoomCode(roomCode);
                   setIsRoomModalOpen(true);
                 }}
-                className="touch-manipulation flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] border border-[#273552] hover:border-[#f59e0b] rounded-xs font-pixel text-[9px] sm:text-xs text-[#fae5b8] whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 shadow-xs"
+                className="hidden sm:flex touch-manipulation items-center gap-1 px-1.5 sm:px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] border border-[#273552] hover:border-[#f59e0b] rounded-xs font-pixel text-[9px] sm:text-xs text-[#fae5b8] whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 shadow-xs"
                 title="Tap to switch room"
               >
                 <span className="text-[#38bdf8]">ROOM:</span>
@@ -742,6 +716,11 @@ export default function App() {
           squads={squadPillsData}
           onSelectSquad={handleSelectSquad}
           onCreateSquad={handleCreateSquad}
+          onDeleteSquad={handleDeleteSquad}
+          onOpenRoomModal={() => {
+            setTempRoomCode(roomCode);
+            setIsRoomModalOpen(true);
+          }}
         />
 
         {/* Retro Toast Notification - Positioned safely at bottom on mobile (< 768px), top center on desktop */}

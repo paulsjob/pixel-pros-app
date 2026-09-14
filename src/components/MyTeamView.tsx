@@ -176,7 +176,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                         </div>
 
                         {gameSituation && (
-                          <div className="font-pixel text-[9px] truncate mt-0.5">
+                          <div className="font-pixel text-[9px] whitespace-nowrap overflow-hidden mt-0.5">
                             {gameSituation.isLive ? (
                               <span className="text-[#b91c1c] flex items-center gap-1 font-bold">
                                 <span className="w-1.5 h-1.5 rounded-full bg-[#ef4444] animate-pulse shrink-0" />
@@ -287,7 +287,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                       </div>
                       <div className="flex flex-col text-left">
                         <span className="font-pixel text-[11px] text-[#b45309] group-hover:text-[#12579b] font-bold">
-                          [ + TAP TO PICK STAR ]
+                          + TAP TO PICK STAR
                         </span>
                         <span className="font-retro text-[10px] text-[#784610]">
                           ASSIGN {label}
@@ -301,7 +301,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                         <span className="font-pixel text-xl font-bold">+</span>
                       </div>
                       <span className="font-pixel text-xs sm:text-sm text-[#b45309] group-hover:text-[#12579b] text-center px-1 font-bold">
-                        [ + TAP TO PICK STAR ]
+                        + TAP TO PICK STAR
                       </span>
                       <span className="font-retro text-[11px] text-[#784610] mt-1">
                         ASSIGN {label}
@@ -316,8 +316,8 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
 
         {/* Arcade Lock / Unlock Action Bar (Grounded Full-Width Control Deck Spanning Cards) */}
         <div className="mt-3 sm:mt-4 w-full box-border">
-          {isLocked ? (
-            /* STATE A: LOCKED (Confirmed & In the Vault) */
+          {filledCount === 3 && isLocked ? (
+            /* STATE A: LOCKED (All 3 Stars Picked & Confirmed) */
             <div className="w-full px-3 sm:px-5 py-2 sm:py-3 bg-[#064e3b] text-[#fae5b8] border-3 border-[#047857] shadow-[0_4px_0_0_#022c22] rounded-xs flex items-center justify-between gap-2 sm:gap-4 box-border">
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <span className="font-pixel text-[11px] sm:text-sm text-[#fde047] font-bold tracking-wider truncate flex items-center gap-1.5 sm:gap-2">
@@ -354,7 +354,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
               </button>
             </div>
           ) : (
-            /* STATE C: INCOMPLETE (< 3 Stars Selected) */
+            /* STATE C: INCOMPLETE (< 3 Stars Selected - Cannot Lock) */
             <button
               type="button"
               disabled
