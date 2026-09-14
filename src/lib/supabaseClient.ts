@@ -187,41 +187,53 @@ export async function fetchLiveNFLMatches(): Promise<Match[]> {
   }
 }
 
+function sanitizeCompetitorId(id?: string | null): string | null {
+  if (!id || typeof id !== 'string') return null;
+  const trimmed = id.trim();
+  if (!trimmed || trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return null;
+  // If it is a legacy placeholder rather than genuine ID, reject to prevent foreign key errors
+  if (['mahomes', 'henry', 'lamb', 'allen', 'jackson', 'barkley', 'jefferson'].includes(trimmed)) return null;
+  return trimmed;
+}
+
 /**
  * Upsert picks directly to Supabase table `user_rosters`:
- * { room_code: roomCode.toUpperCase(), device_id: deviceId, user_name: userName, star_1_id, star_2_id, star_3_id, is_locked, updated_at: new Date().toISOString() }
- * Also synchronizes with local multi-device storage cache so multi-tab or local sessions stay in sync.
+ * { room_code: cleanRoom, user_name: cleanName, star_1_id, star_2_id, star_3_id, device_id: isLocked ? 'LOCKED' : 'UNLOCKED', updated_at: new Date().toISOString() }
+ * Uses unique constraint (room_code, user_name).
  */
 export async function upsertUserRoster(
   roomCode: string,
   userName: string,
-  star1Id: string,
-  star2Id: string,
-  star3Id: string,
+  star1Id?: string | null,
+  star2Id?: string | null,
+  star3Id?: string | null,
   isLocked?: boolean
 ): Promise<{ success: boolean; data?: UserRoster }> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-  const cleanName = (userName || 'YOU').trim();
-  const deviceId = getDeviceId();
+  const cleanName = (userName || 'DAD').trim().toUpperCase();
+
+  const sanitizedS1 = sanitizeCompetitorId(star1Id);
+  const sanitizedS2 = sanitizeCompetitorId(star2Id);
+  const sanitizedS3 = sanitizeCompetitorId(star3Id);
 
   const record: UserRoster = {
     room_code: cleanRoom,
     user_name: cleanName,
-    device_id: deviceId,
-    star_1_id: star1Id || '',
-    star_2_id: star2Id || '',
-    star_3_id: star3Id || '',
+    device_id: isLocked ? 'LOCKED' : 'UNLOCKED',
+    star_1_id: sanitizedS1 || '',
+    star_2_id: sanitizedS2 || '',
+    star_3_id: sanitizedS3 || '',
     is_locked: isLocked ?? false,
     updated_at: new Date().toISOString(),
   };
 
-  // Sync to local room cache (keyed by room & device_id or user_name)
+  // Sync to local room cache (keyed strictly by room & user_name)
   try {
     const localKey = `pixel_pros_rosters_${cleanRoom}`;
     const raw = localStorage.getItem(localKey);
     let rosters: UserRoster[] = raw ? JSON.parse(raw) : [];
     const idx = rosters.findIndex(
-      (r) => (r.device_id && r.device_id === deviceId) || r.user_name.toLowerCase() === cleanName.toLowerCase()
+      (r) => r.user_name.toUpperCase() === cleanName
     );
     if (idx >= 0) {
       rosters[idx] = { ...rosters[idx], ...record };
@@ -229,44 +241,31 @@ export async function upsertUserRoster(
       rosters.push(record);
     }
     localStorage.setItem(localKey, JSON.stringify(rosters));
-    // Save lock state explicitly in localStorage for this room and device/user
-    localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${deviceId}`, isLocked ? 'true' : 'false');
+
+    // Save lock state explicitly per room and user_name
     localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, isLocked ? 'true' : 'false');
-    // Save user's roster for this specific room to enable instant multi-room switching
-    localStorage.setItem(`pixel_pros_roster_${cleanRoom}`, JSON.stringify([record.star_1_id, record.star_2_id, record.star_3_id]));
-    // Dispatch local notification event
+    // Save user's roster for this specific squad & room
+    localStorage.setItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`, JSON.stringify([record.star_1_id, record.star_2_id, record.star_3_id]));
     window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: record }));
   } catch {
     // ignore
   }
 
-  // Upsert to Supabase table user_rosters with device_id
+  // Upsert to Supabase table user_rosters with onConflict: 'room_code, user_name'
   try {
     const payload: any = {
       room_code: cleanRoom,
-      device_id: deviceId,
       user_name: cleanName,
-      star_1_id: star1Id || '',
-      star_2_id: star2Id || '',
-      star_3_id: star3Id || '',
+      star_1_id: sanitizedS1,
+      star_2_id: sanitizedS2,
+      star_3_id: sanitizedS3,
+      device_id: isLocked ? 'LOCKED' : 'UNLOCKED',
       updated_at: record.updated_at,
     };
-    if (typeof isLocked === 'boolean') {
-      payload.is_locked = isLocked;
-    }
 
-    // Try upserting with (room_code, device_id)
-    let { error } = await supabase
+    const { error } = await supabase
       .from('user_rosters')
-      .upsert(payload, { onConflict: 'room_code, device_id' });
-
-    // Fallback if DB table constraint is room_code,user_name
-    if (error && error.message && error.message.includes('conflict')) {
-      const fallback = await supabase
-        .from('user_rosters')
-        .upsert(payload, { onConflict: 'room_code,user_name' });
-      error = fallback.error;
-    }
+      .upsert(payload, { onConflict: 'room_code, user_name' });
 
     if (error) {
       console.warn('Supabase user_rosters upsert notice:', error.message);
@@ -287,8 +286,8 @@ export function isGhostUser(name?: string | null): boolean {
 }
 
 /**
- * Queries user_rosters where room_code = currentRoomCode.
- * Filters out ghost entries where user_name in ('P', 'PA', 'PAU', 'PAUL J') or user_name is null.
+ * Queries user_rosters where room_code = currentRoomCode (strict uppercase).
+ * Strict database identity is (room_code, user_name).
  */
 export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
@@ -313,34 +312,40 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
       .select('*')
       .eq('room_code', cleanRoom)
       .not('user_name', 'is', null)
-      .not('user_name', 'in', '("P","PA","PAU","PAUL J")')
       .order('updated_at', { ascending: false });
 
-    if (error || !data || data.length === 0) {
+    if (error || !data) {
       return localRosters;
     }
 
-    // Merge Supabase records with local records: deduplicate by device_id or user_name
+    // Merge Supabase records with local records: deduplicate strictly by user_name.toUpperCase()
     const map = new Map<string, UserRoster>();
     localRosters.forEach((r) => {
       if (isGhostUser(r.user_name)) return;
-      const key = r.device_id ? `dev_${r.device_id}` : `name_${r.user_name.toLowerCase()}`;
+      const key = r.user_name.trim().toUpperCase();
       map.set(key, r);
     });
+
     data.forEach((r: any) => {
       if (isGhostUser(r.user_name)) return;
+      const key = (r.user_name || '').trim().toUpperCase();
+      if (!key) return;
+
+      const isLocked =
+        r.device_id === 'LOCKED' ||
+        localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${key}`) === 'true';
+
       const entry: UserRoster = {
         id: r.id,
-        room_code: r.room_code,
-        user_name: r.user_name,
+        room_code: (r.room_code || '').toUpperCase(),
+        user_name: key,
         device_id: r.device_id,
-        star_1_id: r.star_1_id,
-        star_2_id: r.star_2_id,
-        star_3_id: r.star_3_id,
-        is_locked: Boolean(r.is_locked),
+        star_1_id: r.star_1_id || '',
+        star_2_id: r.star_2_id || '',
+        star_3_id: r.star_3_id || '',
+        is_locked: isLocked,
         updated_at: r.updated_at,
       };
-      const key = entry.device_id ? `dev_${entry.device_id}` : `name_${entry.user_name.toLowerCase()}`;
       map.set(key, entry);
     });
 
@@ -348,6 +353,32 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
   } catch {
     return localRosters;
   }
+}
+
+/**
+ * Subscribes to Realtime Postgres changes specifically for a room's user_rosters.
+ * Instant zero-lag sync across multiple devices in the room.
+ */
+export function subscribeToRoomRosters(roomCode: string, onUpdate: () => void) {
+  const clean = (roomCode || 'COUCH').trim().toUpperCase();
+  const channel = supabase
+    .channel(`room-${clean}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'user_rosters',
+      },
+      () => {
+        onUpdate();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 /**

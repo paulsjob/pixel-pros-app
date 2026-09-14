@@ -38,10 +38,11 @@ export const RoomSetupBar: React.FC<RoomSetupBarProps> = ({
   };
 
   const handleRoomBlurOrEnter = () => {
-    const clean = localRoom.trim().toUpperCase();
-    if (clean && clean !== roomCode) {
+    const clean = (localRoom || 'COUCH').trim().toUpperCase();
+    if (clean) {
+      setLocalRoom(clean);
       onCommitRoomCode(clean);
-    } else if (!clean) {
+    } else {
       setLocalRoom(roomCode); // revert if empty
     }
   };

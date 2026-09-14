@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Competitor, UserProfile, UserRoster } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { PixelHelmetIcon, PixelShieldIcon } from './PixelBadges';
-import { RoomSetupBar } from './RoomSetupBar';
 import { Users, Sparkles } from 'lucide-react';
 import { splitPlayerFirstLastName, formatPlayerInitialLastName, formatTeamPosSubtitle } from '../utils/formatters';
 import { getDeviceId } from '../lib/deviceIdentity';
@@ -33,6 +32,7 @@ interface LeaderboardViewProps {
   onCommitRoomCode: (code: string) => void;
   onCommitUserName: (name: string) => void;
   onOpenPlayerDetail?: (player: Competitor) => void;
+  onSelectSquad?: (squadName: string) => void;
 }
 
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
@@ -44,13 +44,15 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   onCommitRoomCode,
   onCommitUserName,
   onOpenPlayerDetail,
+  onSelectSquad,
 }) => {
   // Two bold retro toggle buttons: [ FAMILY ] (default) and [ TOP SCORES ]
   const [activeTier, setActiveTier] = useState<'family' | 'top_scores'>('family');
 
   const safeNflPlayers = Array.isArray(nflCompetitors) ? nflCompetitors : [];
   const safeRoomRosters = Array.isArray(roomRosters) ? roomRosters : [];
-  const myDeviceId = getDeviceId();
+  const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+  const activeNormalizedName = (userName || 'DAD').trim().toUpperCase();
 
   // Top 20 NFL Competitors ordered by score DESC
   const top20Players = safeNflPlayers
@@ -58,12 +60,11 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     .sort((a, b) => (b.score || 0) - (a.score || 0))
     .slice(0, 20);
 
-  // Fallback couch companions ONLY for default 'COUCH' room
+  // Fallback couch companions ONLY for default 'COUCH' room if no saved room rosters exist
   const defaultCouchLineups: UserRoster[] = [
     {
       room_code: 'COUCH',
       user_name: 'DAD',
-      device_id: 'couch_dad_bot',
       star_1_id: safeNflPlayers[1]?.id || 'mahomes',
       star_2_id: safeNflPlayers[4]?.id || 'henry',
       star_3_id: safeNflPlayers[7]?.id || 'brown',
@@ -72,7 +73,6 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     {
       room_code: 'COUCH',
       user_name: 'MOM',
-      device_id: 'couch_mom_bot',
       star_1_id: safeNflPlayers[0]?.id || 'allen',
       star_2_id: safeNflPlayers[3]?.id || 'lamb',
       star_3_id: safeNflPlayers[8]?.id || 'jefferson',
@@ -81,7 +81,6 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     {
       room_code: 'COUCH',
       user_name: 'BROTHER',
-      device_id: 'couch_bro_bot',
       star_1_id: safeNflPlayers[2]?.id || 'jackson',
       star_2_id: safeNflPlayers[5]?.id || 'barkley',
       star_3_id: safeNflPlayers[9]?.id || 'chase',
@@ -89,11 +88,10 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     },
   ];
 
-  // Current user roster entry for this active room and device
+  // Current active user roster entry for this room
   const currentUserRoster: UserRoster = {
-    room_code: roomCode.toUpperCase(),
-    user_name: userName.trim().toUpperCase() || 'YOU',
-    device_id: myDeviceId,
+    room_code: cleanRoom,
+    user_name: activeNormalizedName,
     star_1_id: user.selectedPlayerIds?.[0] || '',
     star_2_id: user.selectedPlayerIds?.[1] || '',
     star_3_id: user.selectedPlayerIds?.[2] || '',
@@ -101,35 +99,35 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     updated_at: new Date().toISOString(),
   };
 
-  // Map to deduplicate by device_id or user_name, strictly scoped to this room_code
+  // Map to deduplicate strictly by user_name.toUpperCase() in this room
   const rosterMap = new Map<string, UserRoster>();
   
-  // 1. If standard COUCH room, seed companions
-  if (roomCode.toUpperCase() === 'COUCH') {
+  // 1. If standard COUCH room and no saved room rosters, seed companions
+  if (cleanRoom === 'COUCH' && safeRoomRosters.filter((r) => (r.room_code || '').toUpperCase() === 'COUCH').length === 0) {
     defaultCouchLineups.forEach((r) => {
-      rosterMap.set(`companion_${r.user_name.toUpperCase()}`, r);
+      rosterMap.set(r.user_name.toUpperCase(), r);
     });
   }
 
   // 2. Add synced room rosters strictly belonging to this room_code (ignoring ghost users)
   safeRoomRosters.forEach((r) => {
     if (isGhostUser(r.user_name)) return;
-    if ((r.room_code || '').toUpperCase() === roomCode.toUpperCase()) {
-      const key = r.device_id ? `dev_${r.device_id}` : `name_${r.user_name.toUpperCase()}`;
-      rosterMap.set(key, r);
+    if ((r.room_code || '').toUpperCase() === cleanRoom) {
+      const key = (r.user_name || '').trim().toUpperCase();
+      if (key) {
+        rosterMap.set(key, r);
+      }
     }
   });
 
-  // 3. Always enforce current user's entry using their device_id
-  rosterMap.set(`dev_${myDeviceId}`, currentUserRoster);
+  // 3. Always enforce currently active squad's live picks
+  rosterMap.set(activeNormalizedName, currentUserRoster);
 
   const familyListWithDynamicTotals = Array.from(rosterMap.values())
     .filter((entry) => !isGhostUser(entry.user_name))
     .map((entry) => {
-    const isUser =
-      (entry.device_id && entry.device_id === myDeviceId) ||
-      entry.user_name.toUpperCase() === currentUserRoster.user_name.toUpperCase() ||
-      entry.user_name.toUpperCase() === 'YOU';
+    const entryName = (entry.user_name || '').trim().toUpperCase();
+    const isUser = entryName === activeNormalizedName;
 
     const star1 = safeNflPlayers.find((p) => p.id === entry.star_1_id);
     const star2 = safeNflPlayers.find((p) => p.id === entry.star_2_id);
@@ -140,9 +138,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     const sumPoints = starPlayers.reduce((sum, p) => sum + (p.score || 0), 0);
 
     return {
-      userName: isUser ? (userName.trim().toUpperCase() || 'YOU') : entry.user_name,
+      userName: entryName,
       isYou: isUser,
-      isLocked: Boolean(entry.is_locked),
+      isLocked: Boolean(entry.is_locked || entry.device_id === 'LOCKED'),
       starPlayers,
       totalScore: sumPoints,
       stars: [star1, star2, star3],
@@ -164,17 +162,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-3 sm:space-y-5 box-border px-0 overflow-hidden">
-      
-      {/* Shared Room Bar */}
-      <RoomSetupBar
-        userName={userName}
-        roomCode={roomCode}
-        onCommitUserName={onCommitUserName}
-        onCommitRoomCode={onCommitRoomCode}
-        memberCount={familyListWithDynamicTotals.length}
-      />
-
+    <div className="w-full box-border space-y-3 sm:space-y-4 overflow-hidden">
       {/* Top Header - No repetitive text */}
       <div className="text-center">
         <div className="flex items-center justify-center gap-2 sm:gap-3 mb-1">
@@ -244,12 +232,16 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
               return (
                 <div
-                  key={entry.userName || index}
+                  key={entry.userName}
+                  onClick={() => onSelectSquad && onSelectSquad(entry.userName)}
                   className={`w-full flex items-center justify-between p-2.5 sm:p-3 border-2 rounded-xs transition-all box-border ${
+                    onSelectSquad ? 'cursor-pointer' : ''
+                  } ${
                     isUser
                       ? 'bg-[#155e9e] text-[#fae5b8] border-[#38bdf8] shadow-[0_3px_0_0_#051a30]'
                       : 'bg-[#ebd2a4] text-[#5c3509] border-[#c99a57] hover:bg-[#fae9c8]'
                   }`}
+                  title={onSelectSquad ? (isUser ? `Active squad: ${entry.userName}` : `Tap to manage ${entry.userName}'s squad`) : undefined}
                 >
                   {/* Column 1: Rank Badge + Helmet Icon + Name + 3 Mini Star Badges */}
                   <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 pr-2">

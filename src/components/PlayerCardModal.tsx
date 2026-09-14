@@ -177,25 +177,31 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           </div>
 
           <div className="space-y-1.5 text-xs font-retro text-[#5c3509]">
-            {/* Touchdowns: {stats.tds} TDs (+{stats.tds * 6} PTS) */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs">
-              <span className="flex items-center gap-1.5 font-bold">
+            {/* Touchdowns */}
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+              <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
                 <span>🏈</span>
-                <span>Touchdowns:</span>
+                <span>{tds} TOUCHDOWNS</span>
               </span>
-              <span className="font-pixel text-xs text-[#b45309] font-bold">
-                {tds} TDs (+{tdPoints} PTS)
+              <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                ....................................................................
+              </span>
+              <span className="text-[#b45309] font-bold shrink-0 ml-1.5 whitespace-nowrap">
+                +{tdPoints} PTS
               </span>
             </div>
 
-            {/* Scrimmage Yards: {totalYds} YDS (+{Math.floor(totalYds / 10)} PTS) */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs">
-              <span className="flex items-center gap-1.5 font-bold">
+            {/* Scrimmage Yards */}
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+              <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
                 <span>⚡</span>
-                <span>Scrimmage Yards:</span>
+                <span>{totalScrimmageYds} SCRIMMAGE YDS</span>
               </span>
-              <span className="font-pixel text-xs text-[#12579b] font-bold">
-                {totalScrimmageYds} YDS (+{yardPoints} PTS)
+              <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                ....................................................................
+              </span>
+              <span className="text-[#12579b] font-bold shrink-0 ml-1.5 whitespace-nowrap">
+                +{yardPoints} PTS
               </span>
             </div>
 
@@ -209,47 +215,36 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           </div>
         </div>
 
-        {/* Arcade Action Buttons: [ ⇄ SWAP THIS STAR ] & [ ✕ CLOSE ] */}
+        {/* Action Button: Full-Width Prominence without redundant bottom Close button */}
         <div className="mt-3.5 space-y-1.5">
-          <div className="grid grid-cols-2 gap-2">
-            {isSelectedForTeam ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (onSwapThisStar) {
-                    onSwapThisStar(selectedPlayer);
-                  } else if (onSelectForTeam) {
-                    onSelectForTeam(selectedPlayer);
-                  }
-                }}
-                className="touch-manipulation py-2.5 px-3 bg-[#12579b] hover:bg-[#186abb] text-[#fae5b8] border-3 border-[#0a2d52] font-pixel text-[11px] sm:text-xs rounded-xs cursor-pointer shadow-[0_3px_0_0_#051a30] active:translate-y-0.5 transition-all text-center flex items-center justify-center gap-1.5 font-bold"
-              >
-                <span>⇄</span>
-                <span>SWAP THIS STAR</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  onSelectForTeam?.(selectedPlayer);
-                  onClose();
-                }}
-                className="touch-manipulation py-2.5 px-3 bg-[#15803d] hover:bg-[#16a34a] text-white border-3 border-[#052e16] font-pixel text-[11px] sm:text-xs rounded-xs cursor-pointer shadow-[0_3px_0_0_#022c11] active:translate-y-0.5 transition-all text-center flex items-center justify-center gap-1.5 font-bold"
-              >
-                <span>+</span>
-                <span>PICK AS A STAR</span>
-              </button>
-            )}
-
+          {isSelectedForTeam ? (
             <button
               type="button"
-              onClick={onClose}
-              className="touch-manipulation py-2.5 px-3 bg-[#784610] hover:bg-[#92400e] text-[#fae5b8] border-3 border-[#451a03] font-pixel text-[11px] sm:text-xs rounded-xs cursor-pointer shadow-[0_3px_0_0_#2b0d01] active:translate-y-0.5 transition-all text-center flex items-center justify-center gap-1.5 font-bold"
+              onClick={() => {
+                if (onSwapThisStar) {
+                  onSwapThisStar(selectedPlayer);
+                } else if (onSelectForTeam) {
+                  onSelectForTeam(selectedPlayer);
+                }
+              }}
+              className="touch-manipulation w-full py-2.5 px-3 bg-[#12579b] hover:bg-[#186abb] text-[#fae5b8] border-3 border-[#0a2d52] font-pixel text-[11px] sm:text-xs rounded-xs cursor-pointer shadow-[0_3px_0_0_#051a30] active:translate-y-0.5 transition-all text-center flex items-center justify-center gap-2 font-bold"
             >
-              <span>✕</span>
-              <span>CLOSE</span>
+              <span>⇄</span>
+              <span>SWAP THIS STAR</span>
             </button>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                onSelectForTeam?.(selectedPlayer);
+                onClose();
+              }}
+              className="touch-manipulation w-full py-2.5 px-3 bg-[#15803d] hover:bg-[#16a34a] text-white border-3 border-[#052e16] font-pixel text-[11px] sm:text-xs rounded-xs cursor-pointer shadow-[0_3px_0_0_#022c11] active:translate-y-0.5 transition-all text-center flex items-center justify-center gap-2 font-bold"
+            >
+              <span>+</span>
+              <span>PICK AS A STAR</span>
+            </button>
+          )}
 
           {/* Unobtrusive subtle text link to drop player */}
           {isSelectedForTeam && onDropPlayer && (

@@ -110,6 +110,75 @@ export function getUniformNumber(name?: string, id?: string): number {
   return 10;
 }
 
+export interface FormattedGameSituation {
+  statusLine: string;
+  scoreLine: string;
+  singleLine: string;
+  isLive: boolean;
+  isFinal: boolean;
+}
+
+/**
+ * Formats game situation compactly for mobile cards to prevent any score truncation
+ */
+export function formatRealtimeGameSituationCompact(match: {
+  quarter_time?: string;
+  quarterTime?: string;
+  periodLabel?: string;
+  away_team?: string;
+  awayTeamCode?: string;
+  home_team?: string;
+  homeTeamCode?: string;
+  away_score?: number;
+  awayScore?: number;
+  home_score?: number;
+  homeScore?: number;
+  status?: string;
+}): FormattedGameSituation {
+  const away = (match.away_team || match.awayTeamCode || '').trim().toUpperCase();
+  const home = (match.home_team || match.homeTeamCode || '').trim().toUpperCase();
+  const aScore = match.away_score ?? match.awayScore ?? 0;
+  const hScore = match.home_score ?? match.homeScore ?? 0;
+  const rawTime = (match.quarter_time || match.quarterTime || match.periodLabel || '').trim();
+  const status = (match.status || '').toLowerCase();
+
+  const isFinal =
+    status === 'final' ||
+    rawTime.toLowerCase().includes('final');
+
+  const isLive =
+    !isFinal &&
+    (status === 'live' ||
+      rawTime.includes('Q') ||
+      rawTime.includes('Half') ||
+      rawTime.includes('OT') ||
+      rawTime.includes('1st') ||
+      rawTime.includes('2nd') ||
+      rawTime.includes('3rd') ||
+      rawTime.includes('4th'));
+
+  let statusLine = 'LIVE';
+  let scoreLine = `${away} ${aScore} - ${home} ${hScore}`;
+
+  if (isFinal) {
+    statusLine = 'FINAL';
+    scoreLine = `${away} ${aScore} - ${home} ${hScore}`;
+  } else if (isLive) {
+    const timeDisplay = rawTime && !rawTime.toLowerCase().includes('live') ? rawTime : '';
+    statusLine = timeDisplay ? `🔴 LIVE · ${timeDisplay}` : '🔴 LIVE';
+    scoreLine = `${away} ${aScore} - ${home} ${hScore}`;
+  } else {
+    // Scheduled / upcoming
+    const kickoff = rawTime || 'SUN 4:25 PM';
+    statusLine = kickoff;
+    scoreLine = `${away} @ ${home}`;
+  }
+
+  const singleLine = `${statusLine} · ${scoreLine}`;
+
+  return { statusLine, scoreLine, singleLine, isLive, isFinal };
+}
+
 /**
  * Renders real-time game situation string strictly according to spec:
  * `{match.quarter_time} · {match.away_team} {match.away_score} - {match.home_team} {match.home_score}`
@@ -127,13 +196,9 @@ export function formatRealtimeGameSituation(
     awayScore?: number;
     home_score?: number;
     homeScore?: number;
+    status?: string;
   }
 ): string {
-  const time = (match.quarter_time || match.quarterTime || match.periodLabel || 'LIVE').trim();
-  const away = (match.away_team || match.awayTeamCode || '').trim().toUpperCase();
-  const home = (match.home_team || match.homeTeamCode || '').trim().toUpperCase();
-  const aScore = match.away_score ?? match.awayScore ?? 0;
-  const hScore = match.home_score ?? match.homeScore ?? 0;
-
-  return `${time} · ${away} ${aScore} - ${home} ${hScore}`;
+  const compact = formatRealtimeGameSituationCompact(match);
+  return compact.singleLine;
 }
