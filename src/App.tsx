@@ -1,43 +1,65 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  INITIAL_USER,
-} from './data/mockData';
-import { Competitor, UserProfile, Match, UserRoster, ActiveSlot, SquadSlots } from './types';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { INITIAL_USER } from './data/mockData';
+import { Competitor, UserProfile, Match, UserRoster, ActiveSlot, SquadSlots, SportId } from './types';
 import {
   supabase,
   subscribeToRealtimeScores,
   subscribeToRoomRosters,
+  fetchLiveCompetitors,
+  fetchLiveMatches,
   fetchLiveNFLCompetitors,
   fetchLiveNFLMatches,
   upsertUserRoster,
   fetchRoomRosters,
   deleteUserRoster,
-  resetRoomRosters,
   getSquadLockState,
   setSquadLockState,
   isGhostUser,
 } from './lib/supabaseClient';
-import { getDeviceId } from './lib/deviceIdentity';
-import { getTeamFullName } from './utils/teamData';
 import { MyTeamView } from './components/MyTeamView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { FamilySquadSwitcher } from './components/FamilySquadSwitcher';
 import { SimpleRulesView } from './components/SimpleRulesView';
 import { PlayerCardModal } from './components/PlayerCardModal';
 import { PlayerPickerModal } from './components/PlayerPickerModal';
-import { DatabaseSchemaView } from './components/DatabaseSchemaView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PixelHelmetIcon } from './components/PixelBadges';
-import { Users, Trophy, Database, HelpCircle, X } from 'lucide-react';
+import { SportSwitcher } from './components/SportSwitcher';
+import { Users, Trophy, HelpCircle, Share2 } from 'lucide-react';
+
+const NBA_TEAMS = ['BOS', 'DEN', 'DAL', 'SAS', 'MIL', 'OKC', 'GSW', 'LAL', 'PHX', 'NYK', 'MIA_NBA', 'PHI_NBA'];
 
 export default function App() {
+  const [currentSport, setCurrentSport] = useState<SportId>(() => {
+    try {
+      const saved = localStorage.getItem('pixel_pros_sport');
+      if (saved === 'nba' || saved === 'nfl') return saved;
+    } catch {}
+    return 'nfl';
+  });
+
   const [currentTab, setCurrentTab] = useState<'squad' | 'couch'>('squad');
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
-  
-  // Room Code & User Name state
+
+  const [roomCode, setRoomCode] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room') || params.get('r');
+      if (urlRoom && urlRoom.trim()) {
+        return urlRoom.trim().toUpperCase();
+      }
+      const sport = (localStorage.getItem('pixel_pros_sport') as SportId) || 'nfl';
+      return (localStorage.getItem(`pixel_pros_room_code_${sport}`) || (sport === 'nba' ? 'HOOPS' : 'COUCH')).toUpperCase();
+    } catch {
+      return 'COUCH';
+    }
+  });
+
   const [userName, setUserName] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem('pixel_pros_user_name');
+      const sport = (localStorage.getItem('pixel_pros_sport') as SportId) || 'nfl';
+      const r = (localStorage.getItem(`pixel_pros_room_code_${sport}`) || 'COUCH').toUpperCase();
+      const saved = localStorage.getItem(`pixel_pros_user_${sport}_${r}`);
       return saved ? saved.trim().toUpperCase() : '';
     } catch {
       return '';
@@ -46,59 +68,44 @@ export default function App() {
 
   const [isAddSquadDrawerOpen, setIsAddSquadDrawerOpen] = useState(false);
 
-  const [roomCode, setRoomCode] = useState<string>(() => {
-    try {
-      return (localStorage.getItem('pixel_pros_room_code') || 'COUCH').toUpperCase();
-    } catch {
-      return 'COUCH';
-    }
-  });
-
-  // Master NFL athletes and matches loaded directly from Supabase
   const [roster, setRoster] = useState<Competitor[]>([]);
+  const rosterRef = useRef<Competitor[]>([]);
+  rosterRef.current = roster;
+
   const [matches, setMatches] = useState<Match[]>([]);
   const [roomRosters, setRoomRosters] = useState<UserRoster[]>([]);
 
-  // Explicit 3-slot roster state: star1, star2, star3 (Can be null)
-  const [squadSlots, setSquadSlots] = useState<{
-    star1: Competitor | null;
-    star2: Competitor | null;
-    star3: Competitor | null;
-  }>({ star1: null, star2: null, star3: null });
+  const [squadSlots, setSquadSlots] = useState<SquadSlots>({
+    star1: null,
+    star2: null,
+    star3: null,
+  });
 
-  // Track activeSlot ('star1' | 'star2' | 'star3') when tapping a slot
   const [activeSlot, setActiveSlot] = useState<ActiveSlot | null>(null);
 
-  // Lock Picks Engine State (strictly isolated per room and user_name)
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     try {
-      const cleanRoom = (localStorage.getItem('pixel_pros_room_code') || 'COUCH').trim().toUpperCase();
-      const cleanName = (localStorage.getItem('pixel_pros_user_name') || '').trim().toUpperCase();
-      return cleanName ? getSquadLockState(cleanRoom, cleanName) : false;
+      const sport = (localStorage.getItem('pixel_pros_sport') as SportId) || 'nfl';
+      const r = (localStorage.getItem(`pixel_pros_room_code_${sport}`) || 'COUCH').toUpperCase();
+      const u = (localStorage.getItem(`pixel_pros_user_${sport}_${r}`) || '').toUpperCase();
+      return u ? getSquadLockState(r, u, sport) : false;
     } catch {
       return false;
     }
   });
 
-  // Recent Room codes history
   const [recentRooms, setRecentRooms] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('pixel_pros_recent_rooms');
+      const saved = localStorage.getItem(`pixel_pros_recent_rooms_${currentSport}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((r: string) => r.trim().toUpperCase()).filter(Boolean);
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {
-      // ignore
-    }
-    return ['COUCH', 'CUSE001', 'SUPERBOWL'];
+    } catch {}
+    return currentSport === 'nba' ? ['HOOPS', 'FINALS', 'COUCH'] : ['COUCH', 'CUSE001', 'SUPERBOWL'];
   });
 
-  // Modals state
   const [detailedPlayer, setDetailedPlayer] = useState<Competitor | null>(null);
-  const [isDbDrawerOpen, setIsDbDrawerOpen] = useState(false);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [tempRoomCode, setTempRoomCode] = useState(roomCode);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -110,55 +117,113 @@ export default function App() {
     }, 3200);
   };
 
-  // Sync picks directly to Supabase table user_rosters and localStorage
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlRoom = params.get('room') || params.get('r');
+      const urlSport = (params.get('sport') || params.get('s') || '').toLowerCase() as SportId;
+
+      if (urlSport === 'nba' || urlSport === 'nfl') {
+        setCurrentSport(urlSport);
+        localStorage.setItem('pixel_pros_sport', urlSport);
+      }
+
+      if (urlRoom && urlRoom.trim()) {
+        const clean = urlRoom.trim().toUpperCase();
+        setRoomCode(clean);
+        setTempRoomCode(clean);
+        localStorage.setItem(`pixel_pros_room_code_${urlSport || currentSport}`, clean);
+        showToast(`Joined Room ${clean} via invite!`);
+      }
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch {}
+  }, []);
+
+  const handleSportChange = (sport: SportId) => {
+    if (sport === currentSport) return;
+    setCurrentSport(sport);
+    localStorage.setItem('pixel_pros_sport', sport);
+
+    const scopedRoom = (localStorage.getItem(`pixel_pros_room_code_${sport}`) || (sport === 'nba' ? 'HOOPS' : 'COUCH')).toUpperCase();
+    setRoomCode(scopedRoom);
+    setTempRoomCode(scopedRoom);
+
+    const scopedUser = (localStorage.getItem(`pixel_pros_user_${sport}_${scopedRoom}`) || '').toUpperCase();
+    setUserName(scopedUser);
+
+    setSquadSlots({ star1: null, star2: null, star3: null });
+    setIsLocked(false);
+
+    try {
+      const savedRecent = localStorage.getItem(`pixel_pros_recent_rooms_${sport}`);
+      setRecentRooms(savedRecent ? JSON.parse(savedRecent) : (sport === 'nba' ? ['HOOPS', 'FINALS'] : ['COUCH', 'CUSE001']));
+    } catch {}
+
+    showToast(sport === 'nba' ? 'Switched to NBA Edition!' : 'Switched to NFL Edition!');
+  };
+
+  const handleShareRoom = async () => {
+    const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+    const inviteUrl = `${window.location.origin}/?sport=${currentSport}&room=${cleanRoom}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Pixel Pros ${currentSport.toUpperCase()}`,
+          text: `Join room "${cleanRoom}" on Pixel Pros and draft your 3 ${currentSport.toUpperCase()} stars!`,
+          url: inviteUrl,
+        });
+        return;
+      } catch {}
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      showToast(`COPIED ROOM ${cleanRoom} INVITE LINK!`);
+    } catch {
+      showToast(`Link: ${inviteUrl}`);
+    }
+  };
+
   const syncLineupToSupabase = useCallback(
     async (
       rCode: string,
       uName: string,
-      slotsObj: { star1: Competitor | null; star2: Competitor | null; star3: Competitor | null },
-      lockedFlag?: boolean
+      slotsObj: SquadSlots,
+      lockedFlag?: boolean,
+      targetSport?: SportId
     ) => {
+      const activeSport = targetSport || currentSport;
       const normalizedRoom = (rCode || 'COUCH').trim().toUpperCase();
-      const cleanName = (uName || 'DAD').trim().toUpperCase();
-      const s1Id = slotsObj.star1 ? slotsObj.star1.id : '';
-      const s2Id = slotsObj.star2 ? slotsObj.star2.id : '';
-      const s3Id = slotsObj.star3 ? slotsObj.star3.id : '';
+      const cleanName = (uName || '').trim().toUpperCase();
+      if (!cleanName) return;
+
+      const s1Id = slotsObj.star1?.id || '';
+      const s2Id = slotsObj.star2?.id || '';
+      const s3Id = slotsObj.star3?.id || '';
       const count = [slotsObj.star1, slotsObj.star2, slotsObj.star3].filter(Boolean).length;
       const rawLocked = typeof lockedFlag === 'boolean' ? lockedFlag : isLocked;
-      // Guard condition: A squad with < 3 stars CAN NEVER BE LOCKED
       const guardedLocked = count === 3 && rawLocked;
 
-      // Save squad-specific roster and lock state
-      setSquadLockState(normalizedRoom, cleanName, guardedLocked);
-      try {
-        localStorage.setItem(`pixel_pros_roster_${normalizedRoom}_${cleanName}`, JSON.stringify([s1Id, s2Id, s3Id]));
-      } catch {
-        // ignore
-      }
+      setSquadLockState(normalizedRoom, cleanName, guardedLocked, activeSport);
+      localStorage.setItem(`pixel_pros_roster_${activeSport}_${normalizedRoom}_${cleanName}`, JSON.stringify([s1Id, s2Id, s3Id]));
 
-      await upsertUserRoster(normalizedRoom, cleanName, s1Id, s2Id, s3Id, guardedLocked);
-      // Refresh room rosters
-      const updated = await fetchRoomRosters(normalizedRoom);
+      await upsertUserRoster(normalizedRoom, cleanName, s1Id, s2Id, s3Id, guardedLocked, activeSport);
+      const updated = await fetchRoomRosters(normalizedRoom, activeSport);
       setRoomRosters(updated);
     },
-    [isLocked]
+    [isLocked, currentSport]
   );
 
-  // Switch Active Squad (Pill Selector): Instantly hydrates that family member's 3 stars and lock state
   const handleSelectSquad = (squadName: string) => {
     const cleanName = squadName.trim().toUpperCase();
     if (!cleanName) return;
 
     setUserName(cleanName);
-    try {
-      localStorage.setItem('pixel_pros_user_name', cleanName);
-    } catch {
-      // ignore
-    }
+    localStorage.setItem(`pixel_pros_user_${currentSport}_${roomCode}`, cleanName);
 
-    const normalizedRoom = (roomCode || 'COUCH').trim().toUpperCase();
     const existingRoster = roomRosters.find(
-      (r) => (r.room_code || '').toUpperCase() === normalizedRoom && r.user_name.toUpperCase() === cleanName
+      (r) => (r.room_code || '').toUpperCase() === roomCode && r.user_name.toUpperCase() === cleanName
     );
 
     let s1: Competitor | null = null;
@@ -171,7 +236,7 @@ export default function App() {
       s3 = roster.find((p) => p.id === existingRoster.star_3_id) || null;
     } else {
       try {
-        const saved = localStorage.getItem(`pixel_pros_roster_${normalizedRoom}_${cleanName}`);
+        const saved = localStorage.getItem(`pixel_pros_roster_${currentSport}_${roomCode}_${cleanName}`);
         if (saved) {
           const ids = JSON.parse(saved);
           if (Array.isArray(ids)) {
@@ -180,358 +245,254 @@ export default function App() {
             s3 = roster.find((p) => p.id === ids[2]) || null;
           }
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
 
     const count = [s1, s2, s3].filter(Boolean).length;
     const rawLocked = existingRoster
-      ? Boolean(existingRoster.is_locked || existingRoster.device_id === 'LOCKED' || getSquadLockState(normalizedRoom, cleanName))
-      : getSquadLockState(normalizedRoom, cleanName);
+      ? Boolean(existingRoster.is_locked || existingRoster.device_id === 'LOCKED' || getSquadLockState(roomCode, cleanName, currentSport))
+      : getSquadLockState(roomCode, cleanName, currentSport);
 
-    // STRICT GUARD: A squad with < 3 stars CAN NEVER BE LOCKED
     const squadLocked = count === 3 && rawLocked;
 
     setSquadSlots({ star1: s1, star2: s2, star3: s3 });
     setIsLocked(squadLocked);
-    setSquadLockState(normalizedRoom, cleanName, squadLocked);
+    setSquadLockState(roomCode, cleanName, squadLocked, currentSport);
     setCurrentTab('squad');
     showToast(`Switched active squad to "${cleanName}"`);
   };
 
-  // Add New Squad: Creates a clean lineup for this family member and immediately registers to Supabase
   const handleCreateSquad = async (squadName: string) => {
     const cleanName = squadName.trim().toUpperCase();
     if (!cleanName) return;
 
-    const normalizedRoom = (roomCode || 'COUCH').trim().toUpperCase();
     setUserName(cleanName);
-    try {
-      localStorage.setItem('pixel_pros_user_name', cleanName);
-      localStorage.setItem(`pixel_pros_roster_${normalizedRoom}_${cleanName}`, JSON.stringify(['', '', '']));
-    } catch {
-      // ignore
-    }
-    setSquadLockState(normalizedRoom, cleanName, false);
+    localStorage.setItem(`pixel_pros_user_${currentSport}_${roomCode}`, cleanName);
+    localStorage.setItem(`pixel_pros_roster_${currentSport}_${roomCode}_${cleanName}`, JSON.stringify(['', '', '']));
+    setSquadLockState(roomCode, cleanName, false, currentSport);
 
-    const freshSlots = { star1: null, star2: null, star3: null };
-    setSquadSlots(freshSlots);
+    setSquadSlots({ star1: null, star2: null, star3: null });
     setIsLocked(false);
 
-    // Upsert fresh lineup to Supabase
-    await upsertUserRoster(normalizedRoom, cleanName, null, null, null, false);
-    const updated = await fetchRoomRosters(normalizedRoom);
+    await upsertUserRoster(roomCode, cleanName, null, null, null, false, currentSport);
+    const updated = await fetchRoomRosters(roomCode, currentSport);
     setRoomRosters(updated);
 
     setCurrentTab('squad');
-    showToast(`★ Created squad "${cleanName}" in Room ${normalizedRoom}! Draft your 3 Stars.`);
+    showToast(`Created squad "${cleanName}" in ${currentSport.toUpperCase()}!`);
   };
 
-  // 🗑️ Drop squad from room
   const handleDeleteSquad = async (targetUserName: string) => {
-    const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
     const cleanName = (targetUserName || '').trim().toUpperCase();
     if (!cleanName) return;
 
-    await deleteUserRoster(cleanRoom, cleanName);
+    await deleteUserRoster(roomCode, cleanName, currentSport);
+    setSquadLockState(roomCode, cleanName, false, currentSport);
+    localStorage.removeItem(`pixel_pros_roster_${currentSport}_${roomCode}_${cleanName}`);
 
-    // Clean up local storage entries for this squad
-    setSquadLockState(cleanRoom, cleanName, false);
-    try {
-      localStorage.removeItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`);
-      localStorage.removeItem(`pixel_locked_${cleanRoom}_${cleanName}`);
-      localStorage.removeItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`);
-    } catch {
-      // ignore
-    }
-
-    // Immediately update local rosters state so squad vanishes from switcher and leaderboard
     const updatedRosters = roomRosters.filter(
-      (r) => !(r.room_code.toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName)
+      (r) => !(r.room_code.toUpperCase() === roomCode && r.user_name.toUpperCase() === cleanName)
     );
     setRoomRosters(updatedRosters);
 
-    // If active squad was dropped, switch to first remaining or clear to empty state
     if (userName.toUpperCase() === cleanName) {
       if (updatedRosters.length > 0) {
-        // Switch to the first remaining squad
         const nextName = updatedRosters[0].user_name.toUpperCase();
         setUserName(nextName);
-        try {
-          localStorage.setItem('pixel_pros_user_name', nextName);
-        } catch {
-          // ignore
-        }
+        localStorage.setItem(`pixel_pros_user_${currentSport}_${roomCode}`, nextName);
         handleSelectSquad(nextName);
       } else {
-        // All squads deleted: DO NOT fallback to 'DAD'!
         setUserName('');
-        try {
-          localStorage.removeItem('pixel_pros_user_name');
-        } catch {
-          // ignore
-        }
+        localStorage.removeItem(`pixel_pros_user_${currentSport}_${roomCode}`);
         setSquadSlots({ star1: null, star2: null, star3: null });
         setIsLocked(false);
       }
     }
-
-    showToast(`🗑️ Dropped squad "${cleanName}" from room.`);
+    showToast(`Dropped squad "${cleanName}".`);
   };
 
-  // Switch Room Code: Forces immediate sync and re-fetch of room rosters
   const handleCommitRoomCode = (newCode: string) => {
-    const clean = (newCode || 'COUCH').trim().toUpperCase();
+    const clean = (newCode || (currentSport === 'nba' ? 'HOOPS' : 'COUCH')).trim().toUpperCase();
     setRoomCode(clean);
-    try {
-      localStorage.setItem('pixel_pros_room_code', clean);
-    } catch {
-      // ignore
-    }
+    localStorage.setItem(`pixel_pros_room_code_${currentSport}`, clean);
 
-    // Add to recent rooms list
     setRecentRooms((prev) => {
-      const filtered = prev.filter((r) => r !== clean);
-      const updated = [clean, ...filtered].slice(0, 6);
-      try {
-        localStorage.setItem('pixel_pros_recent_rooms', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
+      const updated = [clean, ...prev.filter((r) => r !== clean)].slice(0, 6);
+      localStorage.setItem(`pixel_pros_recent_rooms_${currentSport}`, JSON.stringify(updated));
       return updated;
     });
 
-    showToast(`🛋️ Room ${clean} synced!`);
+    const scopedUser = (localStorage.getItem(`pixel_pros_user_${currentSport}_${clean}`) || '').toUpperCase();
+    setUserName(scopedUser);
+
+    showToast(`Synced ${currentSport.toUpperCase()} Room ${clean}!`);
   };
 
-  // Remove room code from recent rooms history
   const handleRemoveRecentRoom = (roomToRemove: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const clean = roomToRemove.trim().toUpperCase();
     setRecentRooms((prev) => {
       const updated = prev.filter((r) => r !== clean);
-      try {
-        localStorage.setItem('pixel_pros_recent_rooms', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
+      localStorage.setItem(`pixel_pros_recent_rooms_${currentSport}`, JSON.stringify(updated));
       return updated;
     });
   };
 
-  // Reset entire room: deletes all rosters from Supabase and local cache
   const handleResetCurrentRoom = async () => {
-    const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-    const confirmed = window.confirm(`Clear all squads and picks in room "${cleanRoom}"?`);
+    const confirmed = window.confirm(`Clear all ${currentSport.toUpperCase()} squads in room "${roomCode}"?`);
     if (!confirmed) return;
 
-    // 1. Execute delete against Supabase
     try {
-      await supabase
-        .from('user_rosters')
-        .delete()
-        .eq('room_code', cleanRoom);
-    } catch (err) {
-      console.warn('⚡ Error resetting room rosters in Supabase:', err);
-      try {
-        await resetRoomRosters(cleanRoom);
-      } catch {
-        // ignore
-      }
-    }
+      await supabase.from('user_rosters').delete().eq('room_code', roomCode);
+    } catch {}
 
-    // 2. Wipe local rosters and active user name
     setRoomRosters([]);
     setUserName('');
     setSquadSlots({ star1: null, star2: null, star3: null });
     setIsLocked(false);
-    try {
-      localStorage.removeItem('pixel_pros_user_name');
-    } catch {
-      // ignore
-    }
+    localStorage.removeItem(`pixel_pros_user_${currentSport}_${roomCode}`);
 
-    // 3. Remove all per-squad lock entries from localStorage for that room (pixel_locked_${room}_*)
-    try {
-      localStorage.removeItem(`pixel_pros_rosters_${cleanRoom}`);
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (
-          k &&
-          (k.startsWith(`pixel_locked_${cleanRoom}_`) ||
-            k.startsWith(`pixel_pros_picks_locked_${cleanRoom}_`) ||
-            k.startsWith(`pixel_pros_roster_${cleanRoom}_`) ||
-            k.includes(`_${cleanRoom}_`) ||
-            k.endsWith(`_${cleanRoom}`))
-        ) {
-          keysToRemove.push(k);
-        }
-      }
-      keysToRemove.forEach((k) => localStorage.removeItem(k));
-    } catch {
-      // ignore
-    }
-
-    // 4. Close the modal and show toast
     setIsRoomModalOpen(false);
-    showToast(`Room ${cleanRoom} reset to clean state.`);
+    showToast(`Room ${roomCode} reset.`);
   };
 
-  // Commit User Name
-  const handleCommitUserName = (newName: string) => {
-    const clean = newName.trim().toUpperCase();
-    if (!clean) return;
-    setUserName(clean);
-    try {
-      localStorage.setItem('pixel_pros_user_name', clean);
-    } catch {
-      // ignore
-    }
-    syncLineupToSupabase(roomCode, clean, squadSlots, isLocked);
-    showToast(`Squad name updated to ${clean}`);
-  };
-
-  // Assign an athlete STRICTLY into activeSlot ('star1' | 'star2' | 'star3')
   const handleAssignSlot = (player: Competitor, targetSlot: ActiveSlot) => {
-    if (!userName || !userName.trim()) {
+    if (!userName) {
       setIsAddSquadDrawerOpen(true);
-      showToast('⚠️ Please create a squad first!');
+      showToast('Please create a squad first!');
       return;
     }
 
     const filledCount = [squadSlots.star1, squadSlots.star2, squadSlots.star3].filter(Boolean).length;
     if (filledCount === 3 && isLocked) {
-      showToast('🔒 Lineup is LOCKED! Tap UNLOCK PICKS to make substitutions.');
+      showToast('Lineup is LOCKED! Tap UNLOCK PICKS to make changes.');
       return;
     }
 
     setSquadSlots((prev) => {
       const next: SquadSlots = { ...prev };
-      // If player is currently assigned in another slot, clear that slot to prevent duplicate player cards
       if (next.star1?.id === player.id && targetSlot !== 'star1') next.star1 = null;
       if (next.star2?.id === player.id && targetSlot !== 'star2') next.star2 = null;
       if (next.star3?.id === player.id && targetSlot !== 'star3') next.star3 = null;
 
-      // Assign strictly to target slot
       next[targetSlot] = player;
-
       const newCount = [next.star1, next.star2, next.star3].filter(Boolean).length;
       const willBeLocked = newCount === 3 && isLocked;
-      setIsLocked(willBeLocked);
-      setSquadLockState(roomCode, userName, willBeLocked);
 
-      // Persist & sync
+      setIsLocked(willBeLocked);
+      setSquadLockState(roomCode, userName, willBeLocked, currentSport);
       syncLineupToSupabase(roomCode, userName, next, willBeLocked);
       return next;
     });
 
     const slotLabel = targetSlot === 'star1' ? 'STAR 1' : targetSlot === 'star2' ? 'STAR 2' : 'STAR 3';
-    showToast(`★ ${player.displayName} (${player.teamCode}) assigned to ${slotLabel}!`);
+    showToast(`${player.displayName} assigned to ${slotLabel}!`);
   };
 
-  // Clear a specific slot to null when [X] is clicked
   const handleClearSlot = (slotKey: ActiveSlot) => {
-    if (!userName || !userName.trim()) return;
-
-    // If fewer than 3 stars are selected, force isLocked to false so slots remain clickable
+    if (!userName) return;
     setSquadSlots((prev) => {
       const next = { ...prev, [slotKey]: null };
       setIsLocked(false);
-      setSquadLockState(roomCode, userName, false);
+      setSquadLockState(roomCode, userName, false, currentSport);
       syncLineupToSupabase(roomCode, userName, next, false);
       return next;
     });
-
-    const slotLabel = slotKey === 'star1' ? 'STAR 1' : slotKey === 'star2' ? 'STAR 2' : 'STAR 3';
-    showToast(`Cleared ${slotLabel} slot.`);
+    showToast(`Cleared ${slotKey.toUpperCase()} slot.`);
   };
 
-  // Toggle Lock state
   const handleToggleLock = () => {
-    if (!userName || !userName.trim()) {
+    if (!userName) {
       setIsAddSquadDrawerOpen(true);
       return;
     }
 
-    const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-    const cleanName = userName.trim().toUpperCase();
     const filledCount = [squadSlots.star1, squadSlots.star2, squadSlots.star3].filter(Boolean).length;
-
     if (!isLocked && filledCount < 3) {
-      showToast(`⚠️ Please select all 3 Stars before locking! (${filledCount}/3 picked)`);
+      showToast(`Select all 3 Stars before locking! (${filledCount}/3 picked)`);
       return;
     }
 
     const nextLocked = !isLocked && filledCount === 3;
     setIsLocked(nextLocked);
-    setSquadLockState(cleanRoom, cleanName, nextLocked);
-    syncLineupToSupabase(cleanRoom, cleanName, squadSlots, nextLocked);
+    setSquadLockState(roomCode, userName, nextLocked, currentSport);
+    syncLineupToSupabase(roomCode, userName, squadSlots, nextLocked);
 
-    if (nextLocked) {
-      showToast(`🔒 PICKS LOCKED: ${cleanName}'s lineup submitted to Couch Board!`);
-    } else {
-      showToast(`🔓 PICKS UNLOCKED: ${cleanName}'s slots are now editable.`);
-    }
+    showToast(nextLocked ? `PICKS LOCKED for ${userName}!` : `PICKS UNLOCKED for ${userName}!`);
   };
 
-  // 🏈 Initial Room Sync: Fetches competitors, matches, and room rosters in parallel (Mount & Room change only)
+  // Synchronizer: Fetches both primary and fallback tables if one returns empty
   useEffect(() => {
     let active = true;
     async function sync() {
       try {
-        const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-        let cleanName = (userName || '').trim().toUpperCase();
+        let compData: Competitor[] = [];
+        let matchData: Match[] = [];
 
-        const [comp, match, rost] = await Promise.all([
-          fetchLiveNFLCompetitors(),
-          fetchLiveNFLMatches(),
-          fetchRoomRosters(cleanRoom),
-        ]);
+        if (currentSport === 'nfl') {
+          // Attempt fetchLiveCompetitors first, fallback to fetchLiveNFLCompetitors
+          const primaryComp = await fetchLiveCompetitors('nfl');
+          if (Array.isArray(primaryComp) && primaryComp.length > 0) {
+            compData = primaryComp;
+          } else if (typeof fetchLiveNFLCompetitors === 'function') {
+            const fallbackComp = await fetchLiveNFLCompetitors();
+            compData = fallbackComp || [];
+          }
+
+          const primaryMatches = await fetchLiveMatches('nfl');
+          if (Array.isArray(primaryMatches) && primaryMatches.length > 0) {
+            matchData = primaryMatches;
+          } else if (typeof fetchLiveNFLMatches === 'function') {
+            const fallbackMatches = await fetchLiveNFLMatches();
+            matchData = fallbackMatches || [];
+          }
+        } else {
+          const [nbaComp, nbaMatches] = await Promise.all([
+            fetchLiveCompetitors('nba'),
+            fetchLiveMatches('nba'),
+          ]);
+          compData = nbaComp || [];
+          matchData = nbaMatches || [];
+        }
+
+        const rost = await fetchRoomRosters(roomCode, currentSport);
 
         if (!active) return;
 
-        if (comp && comp.length > 0) {
-          setRoster(comp);
-        }
-        if (match && match.length > 0) {
-          setMatches(match);
-        }
-        if (rost) {
-          setRoomRosters(rost);
-        }
+        // Clean competitor list: Never drop NFL players if sport is unspecified
+        const cleanComp = (compData || []).filter((p) => {
+          if (!p) return false;
+          const rawSport = (p.sport || p.sportId || '').toLowerCase();
+          const team = (p.teamCode || '').toUpperCase();
+          const isExplicitNba = rawSport === 'nba' || NBA_TEAMS.includes(team);
 
-        const athleteList = comp && comp.length > 0 ? comp : [];
+          if (currentSport === 'nba') {
+            return isExplicitNba;
+          }
+          // In NFL mode: keep everything that is NOT NBA
+          return !isExplicitNba;
+        });
+
+        setRoster(cleanComp);
+        setMatches(matchData || []);
+        setRoomRosters(rost || []);
+
         const validRosters = (rost || []).filter((r) => !isGhostUser(r.user_name));
+        let activeUserClean = userName;
 
-        // Determine if current user exists in this room's rosters
-        if (cleanName && !validRosters.some((r) => r.user_name.toUpperCase() === cleanName)) {
+        if (activeUserClean && !validRosters.some((r) => r.user_name.toUpperCase() === activeUserClean)) {
           if (validRosters.length > 0) {
-            cleanName = validRosters[0].user_name.toUpperCase();
-            setUserName(cleanName);
-            try {
-              localStorage.setItem('pixel_pros_user_name', cleanName);
-            } catch {
-              // ignore
-            }
+            activeUserClean = validRosters[0].user_name.toUpperCase();
+            setUserName(activeUserClean);
+            localStorage.setItem(`pixel_pros_user_${currentSport}_${roomCode}`, activeUserClean);
           } else {
-            cleanName = '';
+            activeUserClean = '';
             setUserName('');
-            try {
-              localStorage.removeItem('pixel_pros_user_name');
-            } catch {
-              // ignore
-            }
           }
-        } else if (!cleanName && validRosters.length > 0) {
-          cleanName = validRosters[0].user_name.toUpperCase();
-          setUserName(cleanName);
-          try {
-            localStorage.setItem('pixel_pros_user_name', cleanName);
-          } catch {
-            // ignore
-          }
+        } else if (!activeUserClean && validRosters.length > 0) {
+          activeUserClean = validRosters[0].user_name.toUpperCase();
+          setUserName(activeUserClean);
+          localStorage.setItem(`pixel_pros_user_${currentSport}_${roomCode}`, activeUserClean);
         }
 
         let s1: Competitor | null = null;
@@ -539,45 +500,23 @@ export default function App() {
         let s3: Competitor | null = null;
         let initialLock = false;
 
-        if (cleanName) {
-          const dbRoster = validRosters.find(
-            (r) => (r.room_code || '').toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName
-          );
-
+        if (activeUserClean) {
+          const dbRoster = validRosters.find((r) => r.user_name.toUpperCase() === activeUserClean);
           if (dbRoster) {
-            s1 = athleteList.find((a) => a.id === dbRoster.star_1_id) || null;
-            s2 = athleteList.find((a) => a.id === dbRoster.star_2_id) || null;
-            s3 = athleteList.find((a) => a.id === dbRoster.star_3_id) || null;
+            s1 = cleanComp.find((a) => a.id === dbRoster.star_1_id) || null;
+            s2 = cleanComp.find((a) => a.id === dbRoster.star_2_id) || null;
+            s3 = cleanComp.find((a) => a.id === dbRoster.star_3_id) || null;
             initialLock = Boolean(dbRoster.is_locked || dbRoster.device_id === 'LOCKED');
-          } else {
-            try {
-              const saved =
-                localStorage.getItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`) ||
-                localStorage.getItem(`pixel_pros_roster_${cleanRoom}`);
-              if (saved) {
-                const ids: string[] = JSON.parse(saved);
-                if (Array.isArray(ids)) {
-                  s1 = athleteList.find((a) => a.id === ids[0] || a.shortName.toLowerCase() === ids[0]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[0]?.toLowerCase())) || null;
-                  s2 = athleteList.find((a) => a.id === ids[1] || a.shortName.toLowerCase() === ids[1]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[1]?.toLowerCase())) || null;
-                  s3 = athleteList.find((a) => a.id === ids[2] || a.shortName.toLowerCase() === ids[2]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[2]?.toLowerCase())) || null;
-                }
-              }
-              initialLock = getSquadLockState(cleanRoom, cleanName);
-            } catch {
-              // ignore
-            }
           }
         }
 
         const filledCount = [s1, s2, s3].filter(Boolean).length;
-        const finalLock = cleanName ? (filledCount === 3 && initialLock) : false;
+        const finalLock = activeUserClean ? filledCount === 3 && initialLock : false;
+
         setSquadSlots({ star1: s1, star2: s2, star3: s3 });
         setIsLocked(finalLock);
-        if (cleanName) {
-          setSquadLockState(cleanRoom, cleanName, finalLock);
-        }
       } catch (err) {
-        console.warn('⚡ Room sync error:', err);
+        console.warn('Room sync error:', err);
       }
     }
 
@@ -585,182 +524,58 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [roomCode]);
+  }, [roomCode, currentSport]);
 
-  // ⚡ Connect Realtime Wire: Subscribes to Supabase postgres_changes for competitors, matches, and user_rosters
   useEffect(() => {
     const unsubscribe = subscribeToRealtimeScores(
       (competitorPayload) => {
         const updated = competitorPayload?.new as any;
         if (updated && (updated.id || updated.short_name)) {
-          const statsObj = typeof updated.stats === 'object' && updated.stats ? updated.stats : {};
-          const formatStats = (existingStats?: Record<string, any>) => {
-            const passYds = Number(statsObj.pass_yds ?? updated.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? existingStats?.pass_yds ?? existingStats?.passingYards ?? 0);
-            const rushYds = Number(statsObj.rush_yds ?? updated.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? existingStats?.rush_yds ?? existingStats?.rushingYards ?? 0);
-            const recYds = Number(statsObj.rec_yds ?? updated.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? existingStats?.rec_yds ?? existingStats?.receivingYards ?? 0);
-            const tds = Number(statsObj.tds ?? updated.tds ?? statsObj.touchdowns ?? existingStats?.tds ?? existingStats?.touchdowns ?? 0);
-            return {
-              ...existingStats,
-              ...statsObj,
-              pass_yds: passYds,
-              rush_yds: rushYds,
-              rec_yds: recYds,
-              tds: tds,
-              passingYards: passYds,
-              rushingYards: rushYds,
-              receivingYards: recYds,
-              touchdowns: tds,
-            };
-          };
-
           setRoster((prev) =>
-            (prev || []).map((p) => {
-              if (p.id === updated.id || p.shortName.toLowerCase() === (updated.short_name || '').toLowerCase()) {
-                const newScore = Math.round(Number(updated.score ?? p.score) || 0);
-                return {
-                  ...p,
-                  score: newScore,
-                  stats: formatStats(p.stats),
-                };
-              }
-              return p;
-            })
+            (prev || []).map((p) =>
+              p.id === updated.id ? { ...p, score: Math.round(Number(updated.score ?? p.score) || 0) } : p
+            )
           );
-          setSquadSlots((prev) => {
-            const updateItem = (p: Competitor | null) => {
-              if (p && (p.id === updated.id || p.shortName.toLowerCase() === (updated.short_name || '').toLowerCase())) {
-                const newScore = Math.round(Number(updated.score ?? p.score) || 0);
-                return {
-                  ...p,
-                  score: newScore,
-                  stats: formatStats(p.stats),
-                };
-              }
-              return p;
-            };
-            return {
-              star1: updateItem(prev.star1),
-              star2: updateItem(prev.star2),
-              star3: updateItem(prev.star3),
-            };
-          });
-          setDetailedPlayer((prev) => {
-            if (!prev) return prev;
-            if (prev.id === updated.id || prev.shortName.toLowerCase() === (updated.short_name || '').toLowerCase()) {
-              const newScore = Math.round(Number(updated.score ?? prev.score) || 0);
-              return {
-                ...prev,
-                score: newScore,
-                stats: formatStats(prev.stats),
-              };
-            }
-            return prev;
-          });
-          showToast(`⚡ REALTIME: ${updated.short_name || 'Player'} updated to ${updated.score ?? 0} PTS!`);
         }
       },
-      (matchPayload) => {
-        const row = matchPayload?.new as any;
-        if (row && row.id) {
-          const homeCode = String(row.home_team || row.home_team_code || '').trim().toUpperCase();
-          const awayCode = String(row.away_team || row.away_team_code || '').trim().toUpperCase();
-          const rawStatus = String(row.status || '').toLowerCase();
-          const qTime = String(row.quarter_time || '').trim();
-
-          const isFinal = rawStatus === 'final' || qTime.toLowerCase().includes('final');
-          const isLive = rawStatus === 'live' || (!isFinal && (qTime.includes('th') || qTime.includes('1st') || qTime.includes('2nd') || qTime.includes('3rd') || qTime.includes('Half') || qTime.includes('OT')));
-          const isScheduled = !isFinal && !isLive;
-
-          const awayScore = Number(row.away_score || 0);
-          const homeScore = Number(row.home_score || 0);
-
-          const updatedMatch: Match = {
-            id: String(row.id),
-            sportId: 'nfl',
-            homeTeam: getTeamFullName(homeCode),
-            awayTeam: getTeamFullName(awayCode),
-            homeTeamCode: homeCode,
-            awayTeamCode: awayCode,
-            home_team: homeCode,
-            away_team: awayCode,
-            home_score: homeScore,
-            away_score: awayScore,
-            quarter_time: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
-            quarterTime: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
-            status: isFinal ? 'final' : isLive ? 'live' : 'upcoming',
-            periodLabel: qTime || (isScheduled ? 'SCHEDULED' : isFinal ? 'Final' : 'LIVE'),
-            homeScore,
-            awayScore,
-          };
-
-          setMatches((prev) => {
-            const exists = (prev || []).some((m) => m.id === updatedMatch.id);
-            if (exists) {
-              return (prev || []).map((m) =>
-                m.id === updatedMatch.id ? { ...m, ...updatedMatch } : m
-              );
-            }
-            return [updatedMatch, ...(prev || [])];
-          });
-        }
-      }
+      () => {}
     );
 
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
-  // ⚡ Dedicated Realtime Room Channel: Teardown previous channel and subscribe to new channel for this normalized room
-  useEffect(() => {
-    const normalizedRoom = (roomCode || 'COUCH').trim().toUpperCase();
-
-    const unsubscribeRoom = subscribeToRoomRosters(normalizedRoom, async () => {
-      const fresh = await fetchRoomRosters(normalizedRoom);
+    const unsubscribeRoom = subscribeToRoomRosters(roomCode, async () => {
+      const fresh = await fetchRoomRosters(roomCode, currentSport);
       setRoomRosters(fresh);
 
-      // Hydrate active squad if updated remotely by another device
-      const currentCleanName = (userName || 'DAD').trim().toUpperCase();
-      const remoteSquad = fresh.find((r) => r.user_name.toUpperCase() === currentCleanName);
+      const currentClean = (userName || '').trim().toUpperCase();
+      const remoteSquad = fresh.find((r) => r.user_name.toUpperCase() === currentClean);
       if (remoteSquad) {
+        const currentRoster = rosterRef.current;
         setSquadSlots((prev) => {
           const s1Changed = (prev.star1?.id || '') !== (remoteSquad.star_1_id || '');
           const s2Changed = (prev.star2?.id || '') !== (remoteSquad.star_2_id || '');
           const s3Changed = (prev.star3?.id || '') !== (remoteSquad.star_3_id || '');
           if (s1Changed || s2Changed || s3Changed) {
             return {
-              star1: roster.find((p) => p.id === remoteSquad.star_1_id) || null,
-              star2: roster.find((p) => p.id === remoteSquad.star_2_id) || null,
-              star3: roster.find((p) => p.id === remoteSquad.star_3_id) || null,
+              star1: currentRoster.find((p) => p.id === remoteSquad.star_1_id) || null,
+              star2: currentRoster.find((p) => p.id === remoteSquad.star_2_id) || null,
+              star3: currentRoster.find((p) => p.id === remoteSquad.star_3_id) || null,
             };
           }
           return prev;
         });
-
         const isRemoteLocked = Boolean(remoteSquad.is_locked || remoteSquad.device_id === 'LOCKED');
         setIsLocked((prev) => (prev !== isRemoteLocked ? isRemoteLocked : prev));
       }
-
-      showToast(`⚡ ROOM UPDATE in ${normalizedRoom}!`);
+      showToast(`ROOM UPDATE in ${roomCode}!`);
     });
 
-    const handleLocalRosterUpdate = () => {
-      fetchRoomRosters(normalizedRoom).then(setRoomRosters);
-    };
-    window.addEventListener('pixel_pros_roster_update', handleLocalRosterUpdate);
-
     return () => {
+      unsubscribe();
       unsubscribeRoom();
-      window.removeEventListener('pixel_pros_roster_update', handleLocalRosterUpdate);
     };
-  }, [roomCode, userName, roster]);
+  }, [roomCode, currentSport, userName]);
 
-  // Total points for user
   const filledStars = [squadSlots.star1, squadSlots.star2, squadSlots.star3].filter(Boolean) as Competitor[];
   const userTotalPoints = filledStars.reduce((sum, p) => sum + (p?.score || 0), 0);
-
-  const normalizedRoom = (roomCode || 'COUCH').trim().toUpperCase();
-  const normalizedActiveUser = (userName || '').trim().toUpperCase();
 
   const selectedPlayerIdsArray = [
     squadSlots.star1?.id || '',
@@ -768,38 +583,34 @@ export default function App() {
     squadSlots.star3?.id || '',
   ].filter(Boolean);
 
-  // STRICT GUARD: A squad with < 3 stars CAN NEVER BE LOCKED, nor can an empty squad
   const isCurrentSquadLocked =
-    Boolean(normalizedActiveUser) &&
+    Boolean(userName) &&
     selectedPlayerIdsArray.length === 3 &&
-    Boolean(isLocked || getSquadLockState(normalizedRoom, normalizedActiveUser));
+    Boolean(isLocked || getSquadLockState(roomCode, userName, currentSport));
 
-  // Dynamic Family Squads list in this room for the switcher
   const squadPillsData = roomRosters
-    .filter((r) => !isGhostUser(r.user_name) && (r.room_code || '').toUpperCase() === normalizedRoom)
+    .filter((r) => !isGhostUser(r.user_name) && (r.room_code || '').toUpperCase() === roomCode)
     .map((r) => {
       const s1 = roster.find((p) => p.id === r.star_1_id);
       const s2 = roster.find((p) => p.id === r.star_2_id);
       const s3 = roster.find((p) => p.id === r.star_3_id);
       const stars = [s1, s2, s3].filter(Boolean) as Competitor[];
-      const totalScore = stars.reduce((sum, p) => sum + (p.score || 0), 0);
-      const isCurrent = normalizedActiveUser && r.user_name.toUpperCase() === normalizedActiveUser;
-      // Guard condition: only lock if exactly 3 stars are picked
+      const isCurrent = userName && r.user_name.toUpperCase() === userName;
       const squadLocked = isCurrent
         ? isCurrentSquadLocked
-        : stars.length === 3 && Boolean(r.is_locked || r.device_id === 'LOCKED' || getSquadLockState(normalizedRoom, r.user_name));
+        : stars.length === 3 && Boolean(r.is_locked || r.device_id === 'LOCKED' || getSquadLockState(roomCode, r.user_name, currentSport));
 
       return {
         userName: r.user_name.toUpperCase(),
         isLocked: squadLocked,
         starCount: stars.length,
-        totalScore,
+        totalScore: stars.reduce((sum, p) => sum + (p.score || 0), 0),
       };
     });
 
-  if (normalizedActiveUser && !squadPillsData.some((s) => s.userName === normalizedActiveUser)) {
+  if (userName && !squadPillsData.some((s) => s.userName === userName)) {
     squadPillsData.unshift({
-      userName: normalizedActiveUser,
+      userName: userName,
       isLocked: isCurrentSquadLocked,
       starCount: filledStars.length,
       totalScore: userTotalPoints,
@@ -810,95 +621,93 @@ export default function App() {
     ...INITIAL_USER,
     username: userName,
     totalScore: userTotalPoints,
-    selectedPlayerIds: [
-      squadSlots.star1?.id || '',
-      squadSlots.star2?.id || '',
-      squadSlots.star3?.id || '',
-    ],
+    selectedPlayerIds: selectedPlayerIdsArray,
     isLocked: isCurrentSquadLocked,
   };
 
   return (
     <ErrorBoundary>
       <div className="h-[100dvh] flex flex-col overflow-hidden bg-[#0b1021] text-[#fae5b8] selection:bg-[#12579b] selection:text-white">
-        
-        {/* Row 1: Primary Navigation */}
         <header className="flex-shrink-0 z-40 bg-[#080d1a] border-b-2 border-[#1a264a] w-full shadow-md overflow-x-hidden box-border">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 w-full py-1.5 sm:py-2 flex items-center justify-between gap-1 sm:gap-3 flex-nowrap overflow-x-hidden box-border">
-            
-            {/* Left: 🎮 PIXEL PROS */}
-            <button
-              onClick={() => setCurrentTab('squad')}
-              className="touch-manipulation flex items-center gap-1.5 sm:gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left shrink-0"
-              title="Return to My Squad"
-            >
-              <PixelHelmetIcon size={22} color={activeUser?.avatar?.helmetColor || '#155e9e'} />
-              <span className="font-pixel text-[11px] sm:text-base text-[#fae5b8] tracking-wider group-hover:text-white transition-colors whitespace-nowrap">
-                PIXEL PROS
-              </span>
-            </button>
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 w-full py-1.5 sm:py-2 flex items-center justify-between gap-1 sm:gap-3 flex-nowrap box-border">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+              <button
+                onClick={() => setCurrentTab('squad')}
+                className="touch-manipulation flex items-center gap-1.5 sm:gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left shrink-0"
+              >
+                <PixelHelmetIcon size={22} color={currentSport === 'nba' ? '#ea580c' : '#155e9e'} />
+                <span className="font-pixel text-[11px] sm:text-base text-[#fae5b8] tracking-wider group-hover:text-white transition-colors whitespace-nowrap">
+                  PIXEL PROS
+                </span>
+              </button>
 
-            {/* Center: [ MY SQUAD ]  [ COUCH BOARD ] */}
+              <SportSwitcher currentSport={currentSport} onSportChange={handleSportChange} />
+            </div>
+
             <nav className="flex items-center gap-1 sm:gap-2 shrink-0">
               <button
                 onClick={() => setCurrentTab('squad')}
-                className={`touch-manipulation px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1 sm:gap-1.5 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
+                className={`touch-manipulation px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all ${
                   currentTab === 'squad'
-                    ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30] font-bold'
-                    : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
+                    ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] font-bold'
+                    : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552]'
                 }`}
-                title="My Squad"
               >
                 <Users size={13} className={currentTab === 'squad' ? 'text-[#38bdf8]' : ''} />
-                <span className="whitespace-nowrap md:hidden">SQUAD</span>
-                <span className="whitespace-nowrap hidden md:inline">MY SQUAD</span>
+                <span className="md:hidden">SQUAD</span>
+                <span className="hidden md:inline">MY SQUAD</span>
               </button>
 
               <button
                 onClick={() => setCurrentTab('couch')}
-                className={`touch-manipulation px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1 sm:gap-1.5 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
+                className={`touch-manipulation px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all ${
                   currentTab === 'couch'
-                    ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30] font-bold'
-                    : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
+                    ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] font-bold'
+                    : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552]'
                 }`}
-                title="Couch Board"
               >
                 <Trophy size={13} className={currentTab === 'couch' ? 'text-[#38bdf8]' : ''} />
-                <span className="whitespace-nowrap md:hidden">BOARD</span>
-                <span className="whitespace-nowrap hidden md:inline">COUCH BOARD</span>
+                <span className="md:hidden">BOARD</span>
+                <span className="hidden md:inline">COUCH BOARD</span>
               </button>
             </nav>
 
-            {/* Right: ROOM: CUSE001 (tap to switch room on desktop) and (?) Rules icon */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleShareRoom}
+                className="touch-manipulation flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-[#064e3b] hover:bg-[#047857] text-[#34d399] hover:text-white border border-[#059669] rounded-xs font-pixel text-[9px] sm:text-xs cursor-pointer shadow-xs"
+                title="Invite to Room"
+              >
+                <Share2 size={12} />
+                <span className="hidden xs:inline">INVITE</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
                   setTempRoomCode(roomCode);
                   setIsRoomModalOpen(true);
                 }}
-                className="hidden sm:flex touch-manipulation items-center gap-1 px-1.5 sm:px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] border border-[#273552] hover:border-[#f59e0b] rounded-xs font-pixel text-[9px] sm:text-xs text-[#fae5b8] whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 shadow-xs"
-                title="Tap to switch room"
+                className="hidden sm:flex touch-manipulation items-center gap-1 px-1.5 sm:px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] border border-[#273552] rounded-xs font-pixel text-[9px] sm:text-xs text-[#fae5b8] shadow-xs"
               >
                 <span className="text-[#38bdf8]">ROOM:</span>
                 <span className="text-[#f59e0b] font-bold">{roomCode}</span>
-                <span className="text-[9px] text-[#94a3b8]">✏️</span>
+                <span className="text-[9px]">Edit</span>
               </button>
 
-              {/* Rules (?) Icon */}
               <button
                 onClick={() => setIsRulesModalOpen(true)}
-                className="touch-manipulation w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-[#1a2238] hover:bg-[#232e4b] text-[#fde047] hover:text-white border-2 border-[#273552] rounded-xs cursor-pointer active:translate-y-0.5 transition-all shadow-xs shrink-0"
-                title="How Scoring Works (Rules)"
+                className="touch-manipulation w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center bg-[#1a2238] text-[#fde047] border-2 border-[#273552] rounded-xs cursor-pointer"
+                title="How Scoring Works"
               >
                 <HelpCircle size={15} />
               </button>
             </div>
-
           </div>
         </header>
 
-        {/* Family Squad Profile Switcher: [ DAD ] [ LEO ] [ VIOLET ] + [ + ADD SQUAD ] */}
+        {/* Squad Switcher Bar */}
         <FamilySquadSwitcher
           activeUserName={userName}
           roomCode={roomCode}
@@ -915,33 +724,32 @@ export default function App() {
           }}
         />
 
-        {/* Retro Toast Notification - Positioned safely at bottom on mobile (< 768px), top center on desktop */}
         {toastMessage && (
-          <div className="fixed bottom-4 left-4 right-4 md:bottom-auto md:top-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 md:slide-in-from-top-4 fade-in duration-200 pointer-events-none">
-            <div className="bg-[#064e3b] text-[#fae5b8] px-3.5 sm:px-4 py-2 border-2 border-[#10b981] rounded-xs font-pixel text-xs shadow-[0_6px_16px_rgba(0,0,0,0.7)] flex items-center justify-center md:justify-start gap-2 whitespace-nowrap text-center">
-              <span className="text-sm select-none">⚡</span>
-              <span className="font-bold tracking-wide">{toastMessage}</span>
+          <div className="fixed bottom-4 left-4 right-4 md:bottom-auto md:top-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 pointer-events-none">
+            <div className="bg-[#064e3b] text-[#fae5b8] px-4 py-2 border-2 border-[#10b981] rounded-xs font-pixel text-xs shadow-lg flex items-center justify-center gap-2">
+              <span className="font-bold">{toastMessage}</span>
             </div>
           </div>
         )}
 
-        {/* Main Container with Retro Football Field Texture */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sm:px-6 sm:py-4 overscroll-contain football-field relative box-border">
-          
-          {/* Yard Lines Overlay */}
-          <div className="pointer-events-none absolute inset-0 overflow-hidden flex justify-between items-center opacity-15 px-4 sm:px-8 text-white font-pixel text-2xl sm:text-4xl select-none">
-            <span>10</span>
-            <span>20</span>
-            <span>30</span>
-            <span>40</span>
-            <span>50</span>
-            <span>40</span>
-            <span>30</span>
-            <span>20</span>
-            <span>10</span>
-          </div>
+        {/* Main Stage */}
+        <main
+          className={`flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sm:px-6 sm:py-4 overscroll-contain relative box-border ${
+            currentSport === 'nba' ? 'basketball-court' : 'football-field'
+          }`}
+        >
+          {currentSport === 'nfl' && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden flex justify-between items-center opacity-15 px-4 sm:px-8 text-white font-pixel text-2xl sm:text-4xl select-none">
+              <span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>40</span><span>30</span><span>20</span><span>10</span>
+            </div>
+          )}
 
-          {/* Content Views: Unified max-w-5xl Guide Rails */}
+          {currentSport === 'nba' && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden flex justify-between items-center opacity-15 px-4 sm:px-8 text-[#fae5b8] font-pixel text-xl sm:text-3xl select-none">
+              <span>KEY</span><span>3-PT</span><span>HALF</span><span>3-PT</span><span>KEY</span>
+            </div>
+          )}
+
           <div className="relative z-10 max-w-5xl mx-auto px-2 sm:px-4 py-2 sm:py-4 box-border">
             {currentTab === 'squad' && (
               <MyTeamView
@@ -950,12 +758,13 @@ export default function App() {
                 roomCode={roomCode}
                 isLocked={isCurrentSquadLocked}
                 matches={matches}
-                onCommitUserName={handleCommitUserName}
+                sport={currentSport}
+                onCommitUserName={(name) => setUserName(name.toUpperCase())}
                 onCommitRoomCode={handleCommitRoomCode}
                 onSelectSlot={(slotKey) => setActiveSlot(slotKey)}
                 onClearSlot={handleClearSlot}
                 onToggleLock={handleToggleLock}
-                onLockedSlotAttempt={() => showToast('🔒 Lineup is LOCKED! Tap UNLOCK PICKS to make changes.')}
+                onLockedSlotAttempt={() => showToast('Lineup is LOCKED!')}
                 onInspectPlayer={(player) => setDetailedPlayer(player)}
                 onRequestCreateSquad={() => setIsAddSquadDrawerOpen(true)}
               />
@@ -968,86 +777,51 @@ export default function App() {
                 roomRosters={roomRosters}
                 roomCode={roomCode}
                 userName={userName}
+                sport={currentSport}
                 onCommitRoomCode={handleCommitRoomCode}
-                onCommitUserName={handleCommitUserName}
+                onCommitUserName={(name) => setUserName(name.toUpperCase())}
                 onOpenPlayerDetail={(player) => setDetailedPlayer(player)}
                 onSelectSquad={handleSelectSquad}
               />
             )}
           </div>
-
         </main>
 
-        {/* Footer Info */}
-        <footer className="flex-shrink-0 bg-[#080d1a] border-t-2 border-[#1a264a] py-1.5 sm:py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center text-[10px] sm:text-xs font-retro text-[#fae5b8]/75 z-20 box-border">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 w-full flex items-center justify-center gap-2 whitespace-nowrap box-border">
-            <span className="font-bold text-[#fae5b8]">PIXEL PROS</span>
-            <span className="text-[#38bdf8]/60 select-none">·</span>
-            <span className="text-[#fae5b8]/80">WHOLE NUMBERS ONLY</span>
-            <span className="text-[#38bdf8]/60 select-none">·</span>
+        <footer className="flex-shrink-0 bg-[#080d1a] border-t-2 border-[#1a264a] py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center text-[10px] sm:text-xs font-retro text-[#fae5b8]/75 z-20">
+          <div className="max-w-5xl mx-auto px-4 w-full flex items-center justify-center gap-2">
+            <span className="font-bold text-[#fae5b8]">PIXEL PROS {currentSport.toUpperCase()}</span>
+            <span className="text-[#38bdf8]/60">·</span>
+            <span>WHOLE NUMBERS ONLY</span>
+            <span className="text-[#38bdf8]/60">·</span>
             <button
-              type="button"
               onClick={() => setIsRulesModalOpen(true)}
-              className="touch-manipulation hover:underline text-[#fde047] hover:text-white cursor-pointer font-bold transition-colors"
+              className="hover:underline text-[#fde047] cursor-pointer font-bold"
             >
               RULES (?)
             </button>
           </div>
         </footer>
 
-        {/* Simple Rules Pop-up Modal (The 4-Second Cheat Sheet) */}
         {isRulesModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="relative w-full max-w-lg bg-[#0b1021] border-4 border-[#1a264a] shadow-[0_10px_0_0_#050811] p-3.5 sm:p-5 rounded-xs text-[#fae5b8] flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between border-b-2 border-[#1a264a] pb-2.5 mb-3 shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-base select-none">📖</span>
-                  <h2 className="font-pixel text-xs sm:text-sm text-[#fae5b8] tracking-wider uppercase font-bold">
-                    HOW SCORING WORKS
-                  </h2>
-                </div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85">
+            <div className="relative w-full max-w-lg bg-[#0b1021] border-4 border-[#1a264a] p-4 text-[#fae5b8]">
+              <div className="flex items-center justify-between border-b-2 border-[#1a264a] pb-2 mb-3">
+                <h2 className="font-pixel text-xs text-[#fae5b8] uppercase font-bold">
+                  {currentSport.toUpperCase()} SCORING RULES
+                </h2>
                 <button
-                  type="button"
                   onClick={() => setIsRulesModalOpen(false)}
-                  className="touch-manipulation px-2.5 py-1 bg-[#b91c1c] hover:bg-[#dc2626] text-[#fae5b8] border-2 border-[#1a2238] flex items-center justify-center gap-1 font-pixel text-xs cursor-pointer shadow-[0_2px_0_0_#450a0a] active:translate-y-0.5 rounded-2xs"
-                  title="Close Rules"
+                  className="px-2 py-1 bg-[#b91c1c] text-white font-pixel text-xs"
                 >
-                  <span>✕</span>
-                  <span>CLOSE</span>
+                  Close
                 </button>
               </div>
-              <SimpleRulesView />
+              <SimpleRulesView sport={currentSport} />
             </div>
           </div>
         )}
 
-        {/* Collapsible Supabase / SQL Developer Drawer */}
-        {isDbDrawerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="relative w-full max-w-4xl max-h-[90vh] bg-[#0b1021] border-4 border-[#1a264a] shadow-[0_10px_0_0_#050811] p-4 sm:p-6 rounded-xs text-[#fae5b8] flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between border-b-2 border-[#1a264a] pb-3 mb-4 shrink-0">
-                <div className="flex items-center gap-2">
-                  <Database size={20} className="text-[#38bdf8]" />
-                  <h2 className="font-pixel text-xs sm:text-sm text-[#fae5b8] tracking-wider uppercase">
-                    DEVELOPER &amp; DATABASE ARCHITECTURE
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setIsDbDrawerOpen(false)}
-                  className="touch-manipulation w-8 h-8 bg-[#b91c1c] hover:bg-[#991b1b] text-white border-2 border-[#1a2238] flex items-center justify-center font-pixel text-xs cursor-pointer shadow-[0_2px_0_0_#450a0a] active:translate-y-0.5"
-                  title="Close"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="overflow-y-auto flex-1 pr-1">
-                <DatabaseSchemaView />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Player Picker Modal strictly targeting activeSlot */}
+        {/* Player Picker Modal */}
         {activeSlot !== null && (
           <PlayerPickerModal
             isOpen={activeSlot !== null}
@@ -1057,91 +831,69 @@ export default function App() {
             currentSlotPlayerId={squadSlots[activeSlot]?.id || null}
             selectedPlayerIds={selectedPlayerIdsArray}
             matches={matches}
+            sport={currentSport}
             onInspectPlayer={(player) => setDetailedPlayer(player)}
             onSelectPlayer={(player, targetSlot) => {
               handleAssignSlot(player, targetSlot);
               setActiveSlot(null);
               setDetailedPlayer(null);
-              setCurrentTab('squad');
             }}
           />
         )}
 
-        {detailedPlayer && (() => {
-          const livePlayer =
-            roster.find(
-              (p) =>
-                p.id === detailedPlayer.id ||
-                p.shortName.toLowerCase() === detailedPlayer.shortName.toLowerCase()
-            ) || detailedPlayer;
+        {/* Player Inspector Modal */}
+        {detailedPlayer && (
+          <PlayerCardModal
+            player={detailedPlayer}
+            onClose={() => setDetailedPlayer(null)}
+            sport={currentSport}
+            isSelectedForTeam={selectedPlayerIdsArray.includes(detailedPlayer.id)}
+            onSelectForTeam={(player) => {
+              const target: ActiveSlot = activeSlot || (!squadSlots.star1 ? 'star1' : !squadSlots.star2 ? 'star2' : !squadSlots.star3 ? 'star3' : 'star1');
+              handleAssignSlot(player, target);
+              setDetailedPlayer(null);
+              setActiveSlot(null);
+            }}
+            onSwapThisStar={() => {
+              setDetailedPlayer(null);
+              setActiveSlot('star1');
+            }}
+            onDropPlayer={(player) => {
+              const slotKey: ActiveSlot | null = squadSlots.star1?.id === player.id
+                ? 'star1'
+                : squadSlots.star2?.id === player.id
+                ? 'star2'
+                : squadSlots.star3?.id === player.id
+                ? 'star3'
+                : null;
+              if (slotKey) {
+                handleClearSlot(slotKey);
+              }
+              setDetailedPlayer(null);
+            }}
+          />
+        )}
 
-          const occupiedSlot: ActiveSlot | null =
-            squadSlots.star1?.id === livePlayer.id ? 'star1' :
-            squadSlots.star2?.id === livePlayer.id ? 'star2' :
-            squadSlots.star3?.id === livePlayer.id ? 'star3' : null;
-
-          return (
-            <PlayerCardModal
-              player={livePlayer}
-              onClose={() => setDetailedPlayer(null)}
-              isSelectedForTeam={Boolean(occupiedSlot) || selectedPlayerIdsArray.includes(livePlayer.id)}
-              onSelectForTeam={(player) => {
-                // Target slot is activeSlot if picker was open, or first available slot
-                const targetSlot: ActiveSlot = activeSlot || (!squadSlots.star1
-                  ? 'star1'
-                  : !squadSlots.star2
-                  ? 'star2'
-                  : !squadSlots.star3
-                  ? 'star3'
-                  : 'star1');
-                handleAssignSlot(player, targetSlot);
-                // IMMEDIATELY CLOSE BOTH MODALS & FOCUS ON YOUR 3 NFL STARS
-                setDetailedPlayer(null);
-                setActiveSlot(null);
-                setCurrentTab('squad');
-              }}
-              onSwapThisStar={() => {
-                const slotToSwap: ActiveSlot = occupiedSlot || 'star1';
-                setDetailedPlayer(null);
-                setActiveSlot(slotToSwap);
-              }}
-              onDropPlayer={() => {
-                if (occupiedSlot) {
-                  handleClearSlot(occupiedSlot);
-                  setDetailedPlayer(null);
-                }
-              }}
-            />
-          );
-        })()}
-
-        {/* Quick Room Switcher Modal (Tap-to-switch room) */}
+        {/* Switch Room Modal */}
         {isRoomModalOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-            <div className="pixel-box-cream p-4 sm:p-5 w-full max-w-sm border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d]">
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="pixel-box-cream p-4 w-full max-w-sm border-4 border-[#1a2238]">
               <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-2 mb-3">
-                <h3 className="font-pixel text-xs sm:text-sm text-[#5c3509] flex items-center gap-1.5 font-bold uppercase tracking-wider">
-                  <span>🛋️</span>
-                  <span>SWITCH ROOM</span>
+                <h3 className="font-pixel text-xs text-[#5c3509] font-bold uppercase">
+                  SWITCH {currentSport.toUpperCase()} ROOM
                 </h3>
                 <button
-                  type="button"
                   onClick={() => setIsRoomModalOpen(false)}
-                  className="touch-manipulation w-6 h-6 bg-[#b91c1c] hover:bg-[#dc2626] text-white font-pixel text-xs flex items-center justify-center rounded-2xs border border-[#1a2238] cursor-pointer"
+                  className="w-6 h-6 bg-[#b91c1c] text-white font-pixel text-xs"
                 >
                   ✕
                 </button>
               </div>
-              
-              <p className="font-retro text-xs text-[#784610] mb-2.5">
-                Enter room code to join or create a shared family couch board:
-              </p>
 
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const clean = tempRoomCode.trim().toUpperCase() || 'COUCH';
-                  handleCommitRoomCode(clean);
+                  handleCommitRoomCode(tempRoomCode);
                   setIsRoomModalOpen(false);
                 }}
               >
@@ -1149,36 +901,25 @@ export default function App() {
                   type="text"
                   value={tempRoomCode}
                   onChange={(e) => setTempRoomCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. CUSE001"
-                  maxLength={12}
-                  className="w-full px-3 py-2 bg-[#fae9c8] border-2 border-[#c99a57] rounded-xs font-pixel text-sm text-[#451a03] focus:outline-none focus:border-[#12579b] mb-3 text-center uppercase tracking-wider"
-                  autoFocus
+                  className="w-full px-3 py-2 bg-[#fae9c8] border-2 border-[#c99a57] font-pixel text-sm text-[#451a03] mb-3 text-center uppercase"
                 />
 
-                {/* Quick Room Suggestions / History with [×] removal */}
                 <div className="flex items-center justify-center flex-wrap gap-1.5 mb-3">
                   {recentRooms.map((r) => (
                     <div
                       key={r}
                       onClick={() => setTempRoomCode(r)}
-                      className={`group flex items-center gap-1.5 px-2 py-1 border font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5 transition-all select-none ${
-                        tempRoomCode === r
-                          ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52]'
-                          : 'bg-[#ebd2a4] hover:bg-[#fae5b8] text-[#5c3509] border-[#c99a57]'
+                      className={`flex items-center gap-1.5 px-2 py-1 border font-pixel text-[10px] cursor-pointer ${
+                        tempRoomCode === r ? 'bg-[#12579b] text-white' : 'bg-[#ebd2a4] text-[#5c3509]'
                       }`}
                     >
                       <span>{r}</span>
                       <button
                         type="button"
                         onClick={(e) => handleRemoveRecentRoom(r, e)}
-                        className={`w-3.5 h-3.5 flex items-center justify-center text-[10px] font-bold rounded-2xs transition-colors cursor-pointer shrink-0 ${
-                          tempRoomCode === r
-                            ? 'text-[#fae5b8]/70 hover:text-white hover:bg-[#0a2d52]'
-                            : 'text-[#784610]/70 hover:text-[#b91c1c] hover:bg-[#d4a86a]'
-                        }`}
-                        title={`Remove ${r} from history`}
+                        className="text-[10px] font-bold hover:text-red-600"
                       >
-                        ×
+                        x
                       </button>
                     </div>
                   ))}
@@ -1187,35 +928,32 @@ export default function App() {
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="touch-manipulation flex-1 py-2 bg-[#12579b] hover:bg-[#186abb] text-[#fae5b8] border-2 border-[#0a2d52] font-pixel text-xs font-bold rounded-xs cursor-pointer shadow-xs active:translate-y-0.5"
+                    className="flex-1 py-2 bg-[#12579b] text-[#fae5b8] font-pixel text-xs font-bold"
                   >
                     JOIN ROOM
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsRoomModalOpen(false)}
-                    className="touch-manipulation px-3 py-2 bg-[#784610] hover:bg-[#92400e] text-[#fae5b8] border-2 border-[#451a03] font-pixel text-xs font-bold rounded-xs cursor-pointer active:translate-y-0.5"
+                    className="px-3 py-2 bg-[#784610] text-[#fae5b8] font-pixel text-xs font-bold"
                   >
                     CANCEL
                   </button>
                 </div>
 
-                {/* Subtle Retro Red Button: [ 🗑️ RESET ROOM DATA ] */}
-                <div className="mt-3.5 pt-2.5 border-t-2 border-[#d4a86a]/60 text-center">
+                <div className="mt-3 pt-2 border-t border-[#d4a86a] text-center">
                   <button
                     type="button"
                     onClick={handleResetCurrentRoom}
-                    className="touch-manipulation text-[#991b1b] hover:text-[#dc2626] font-pixel text-[10px] sm:text-[11px] underline cursor-pointer active:translate-y-0.5 transition-colors inline-flex items-center justify-center gap-1.5"
+                    className="text-[#991b1b] font-pixel text-[10px] underline"
                   >
-                    <span>🗑️</span>
-                    <span>RESET ROOM DATA</span>
+                    RESET ROOM DATA
                   </button>
                 </div>
               </form>
             </div>
           </div>
         )}
-
       </div>
     </ErrorBoundary>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Competitor, UserProfile, UserRoster } from '../types';
+import { Competitor, SportId, UserProfile, UserRoster } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { PixelHelmetIcon, PixelShieldIcon } from './PixelBadges';
 import { Users, Sparkles } from 'lucide-react';
@@ -29,6 +29,7 @@ interface LeaderboardViewProps {
   roomRosters?: UserRoster[];
   roomCode: string;
   userName: string;
+  sport?: SportId;
   onCommitRoomCode: (code: string) => void;
   onCommitUserName: (name: string) => void;
   onOpenPlayerDetail?: (player: Competitor) => void;
@@ -41,6 +42,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   roomRosters = [],
   roomCode,
   userName,
+  sport = 'nfl',
   onCommitRoomCode,
   onCommitUserName,
   onOpenPlayerDetail,
@@ -174,7 +176,11 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         <div className="flex items-center justify-between pb-2.5 sm:pb-3 mb-3 border-b-2 border-[#d4a86a]">
           <div>
             <h2 className="font-pixel text-xs sm:text-sm text-[#5c3509] tracking-wider uppercase">
-              {activeTier === 'family' ? `ROOM "${roomCode.toUpperCase()}" 3-STAR STANDINGS` : 'TOP NFL ATHLETES'}
+              {activeTier === 'family'
+                ? `ROOM "${roomCode.toUpperCase()}" 3-STAR STANDINGS`
+                : sport === 'nba'
+                ? 'TOP NBA ATHLETES'
+                : 'TOP NFL ATHLETES'}
             </h2>
           </div>
 
@@ -195,7 +201,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             /* TIER 1: FAMILY RANKING (Dynamic sum of chosen 3 Stars) */
             familyListWithDynamicTotals.length === 0 ? (
               <div className="p-6 sm:p-8 text-center border-2 border-dashed border-[#c99a57] rounded-xs bg-[#fae9c8]/50 flex flex-col items-center justify-center">
-                <span className="text-2xl mb-2">🏈</span>
+                <span className="text-2xl mb-2">{sport === 'nba' ? '🏀' : '🏈'}</span>
                 <p className="font-pixel text-xs sm:text-sm text-[#5c3509] mb-1">NO SQUADS IN ROOM "{cleanRoom}" YET</p>
                 <p className="font-retro text-xs text-[#784610]">Create your first squad to start the household competition!</p>
               </div>
@@ -358,6 +364,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                         number={player.uniformNumber}
                         size="sm"
                         withShadow={false}
+                        sport={sport}
+                        isOnFire={sport === 'nba' && (player.score || 0) >= 40}
                       />
                     </div>
 

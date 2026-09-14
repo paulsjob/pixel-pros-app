@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
-import { Competitor, Match, UserRoster } from '../types';
+import { Competitor, Match, SportId, UserRoster } from '../types';
 import { getDeviceId } from './deviceIdentity';
 import { getTeamColors, getTeamFullName, getUniformNumber } from '../utils/teamData';
+import {
+  DEFAULT_NBA_COMPETITORS,
+  DEFAULT_NBA_MATCHES,
+  getNBATeamColors,
+  getNBATeamFullName,
+} from '../utils/nbaTeamData';
 
 // Ensure Supabase URL and Keys are populated from Vite defines or process.env
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : {};
@@ -43,13 +49,73 @@ function getSkinTone(name?: string): string {
  * Maps a single Supabase `competitors` database row directly to our frontend Competitor model.
  */
 export function mapRowToCompetitor(row: any): Competitor {
+  const rowSport = String(row.sport || row.sport_id || 'nfl').toLowerCase();
   const rawId = String(row.id || '');
-  const rawName = String(row.name || row.display_name || 'NFL Pro').trim();
-  const rawTeam = String(row.team || row.team_code || 'NFL').trim().toUpperCase();
+  const rawName = String(row.name || row.display_name || (rowSport === 'nba' ? 'NBA Star' : 'NFL Pro')).trim();
+  const rawTeam = String(row.team || row.team_code || (rowSport === 'nba' ? 'NBA' : 'NFL')).trim().toUpperCase();
   const rawPos = String(row.position || 'STAR').trim().toUpperCase();
   const rawScore = Math.max(0, Math.round(Number(row.score ?? row.fantasy_points ?? 0)));
 
   const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
+  const parts = rawName.split(/\s+/);
+  const shortName = (parts[parts.length - 1] || 'PRO').toUpperCase();
+  const uniformNum = Number(row.uniform_number || row.jersey_number || getUniformNumber(rawName, rawId));
+
+  if (rowSport === 'nba') {
+    const nbaColors = getNBATeamColors(rawTeam);
+    const pts = Number(statsObj.pts ?? statsObj.points ?? 0);
+    const threePm = Number(statsObj.three_pm ?? statsObj.threes ?? 0);
+    const reb = Number(statsObj.reb ?? statsObj.rebounds ?? 0);
+    const ast = Number(statsObj.ast ?? statsObj.assists ?? 0);
+    const blk = Number(statsObj.blk ?? statsObj.blocks ?? 0);
+    const stl = Number(statsObj.stl ?? statsObj.steals ?? 0);
+    const bigStops = Number(statsObj.big_stops ?? (blk + stl));
+
+    return {
+      id: rawId,
+      sportId: 'nba',
+      displayName: rawName,
+      shortName,
+      uniformNumber: uniformNum,
+      teamName: getNBATeamFullName(rawTeam),
+      teamCode: rawTeam,
+      positionGeneric:
+        rawPos === 'PG' || rawPos === 'SG'
+          ? 'PLAYMAKER'
+          : rawPos === 'C' || rawPos === 'PF'
+          ? 'OFFENSE'
+          : 'SCORER',
+      position: rawPos !== 'STAR' ? rawPos : 'PG',
+      rating: rawScore > 42 ? 99 : rawScore > 35 ? 95 : 90,
+      score: rawScore,
+      stats: {
+        ...statsObj,
+        pts,
+        points: pts,
+        three_pm: threePm,
+        threes: threePm,
+        reb,
+        rebounds: reb,
+        ast,
+        assists: ast,
+        blocks: blk,
+        steals: stl,
+        big_stops: bigStops,
+        primaryMetricLabel: '3-Pointers',
+        primaryMetricValue: threePm,
+      },
+      badges: rawScore >= 42 ? ['diamond_crystal', 'gold_star'] : ['gold_star'],
+      avatar: {
+        helmetColor: nbaColors.jersey,
+        jerseyColor: nbaColors.jersey,
+        stripeColor: nbaColors.stripe,
+        skinTone: getSkinTone(rawName),
+        number: uniformNum,
+      },
+    };
+  }
+
+  // NFL Mapping
   const passYds = Number(statsObj.pass_yds ?? statsObj.passing_yards ?? statsObj.passingYards ?? 0);
   const rushYds = Number(statsObj.rush_yds ?? statsObj.rushing_yards ?? statsObj.rushingYards ?? 0);
   const recYds = Number(statsObj.rec_yds ?? statsObj.receiving_yards ?? statsObj.receivingYards ?? 0);
@@ -57,10 +123,6 @@ export function mapRowToCompetitor(row: any): Competitor {
   const fgs = Number(statsObj.fgs ?? statsObj.field_goals ?? 0);
   const stops = Number(statsObj.stops ?? statsObj.defensive_stops ?? 0);
   const totalScrimmageYards = passYds + rushYds + recYds;
-
-  const parts = rawName.split(/\s+/);
-  const shortName = (parts[parts.length - 1] || 'PRO').toUpperCase();
-  const uniformNum = Number(row.uniform_number || row.jersey_number || getUniformNumber(rawName, rawId));
   const teamColors = getTeamColors(rawTeam);
 
   return {
@@ -103,10 +165,9 @@ export function mapRowToCompetitor(row: any): Competitor {
 }
 
 /**
- * Fetches real active NFL competitors 100% directly from the Supabase competitors table.
- * Strictly presents athletes in that query with genuine database scores and team affiliations.
+ * Fetches real active competitors from Supabase without referencing non-existent sport_id columns.
  */
-export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
+export async function fetchLiveCompetitors(sport: SportId = 'nfl'): Promise<Competitor[]> {
   try {
     const { data, error } = await supabase
       .from('competitors')
@@ -114,59 +175,101 @@ export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
       .order('score', { ascending: false });
 
     if (error) {
-      console.warn('⚡ Error fetching competitors from Supabase:', error.message);
-      return [];
+      console.warn(`⚡ Error fetching ${sport} competitors from Supabase:`, error.message);
+      return sport === 'nba' ? DEFAULT_NBA_COMPETITORS : [];
     }
 
     if (!data || data.length === 0) {
-      return [];
+      return sport === 'nba' ? DEFAULT_NBA_COMPETITORS : [];
     }
 
-    return data.map(mapRowToCompetitor).sort((a, b) => b.score - a.score);
+    // Filter in JS memory to prevent database schema mismatch crashes
+    const filtered = data.filter((row: any) => {
+      const rowSport = String(row.sport || row.sport_id || '').toLowerCase();
+      if (sport === 'nba') {
+        return rowSport === 'nba';
+      }
+      return rowSport !== 'nba';
+    });
+
+    if (filtered.length === 0 && sport === 'nba') {
+      return DEFAULT_NBA_COMPETITORS;
+    }
+
+    return filtered.map(mapRowToCompetitor).sort((a, b) => b.score - a.score);
   } catch (err) {
-    console.warn('⚡ Live Supabase fetch encountered exception:', err);
-    return [];
+    console.warn(`⚡ Live Supabase ${sport} fetch encountered exception:`, err);
+    return sport === 'nba' ? DEFAULT_NBA_COMPETITORS : [];
   }
 }
 
 /**
- * Fetches real NFL games directly from the Supabase matches table (sport = 'nfl').
- * Maps columns: home_team, away_team, home_score, away_score, quarter_time, status.
+ * Fetches real active NFL competitors directly from the Supabase competitors table.
  */
-export async function fetchLiveNFLMatches(): Promise<Match[]> {
+export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
+  return fetchLiveCompetitors('nfl');
+}
+
+/**
+ * Fetches real games directly from the Supabase matches table.
+ */
+export async function fetchLiveMatches(sport: SportId = 'nfl'): Promise<Match[]> {
   try {
-    const { data, error } = await supabase
-      .from('matches')
-      .select('*')
-      .eq('sport', 'nfl');
+    const { data, error } = await supabase.from('matches').select('*');
 
     if (error) {
-      console.warn('⚡ Error fetching matches from Supabase:', error.message);
-      return [];
+      console.warn(`⚡ Error fetching ${sport} matches from Supabase:`, error.message);
+      return sport === 'nba' ? DEFAULT_NBA_MATCHES : [];
     }
 
     if (!data || data.length === 0) {
-      return [];
+      return sport === 'nba' ? DEFAULT_NBA_MATCHES : [];
     }
 
-    return data.map((row: any): Match => {
-      const homeCode = String(row.home_team || row.home_team_code || '').trim().toUpperCase();
-      const awayCode = String(row.away_team || row.away_team_code || '').trim().toUpperCase();
+    // Filter in JS memory to prevent database schema mismatch crashes
+    const filtered = data.filter((row: any) => {
+      const rowSport = String(row.sport || row.sport_id || '').toLowerCase();
+      if (sport === 'nba') {
+        return rowSport === 'nba';
+      }
+      return rowSport !== 'nba';
+    });
+
+    if (filtered.length === 0 && sport === 'nba') {
+      return DEFAULT_NBA_MATCHES;
+    }
+
+    return filtered.map((row: any): Match => {
+      const homeCode = String(row.home_team || row.home_team_code || row.home_competitor_name || '').trim().toUpperCase();
+      const awayCode = String(row.away_team || row.away_team_code || row.away_competitor_name || '').trim().toUpperCase();
       const rawStatus = String(row.status || '').toLowerCase();
-      const qTime = String(row.quarter_time || '').trim();
+      const qTime = String(row.quarter_time || row.period_label || '').trim();
 
       const isFinal = rawStatus === 'final' || qTime.toLowerCase().includes('final');
-      const isLive = rawStatus === 'live' || (!isFinal && (qTime.includes('th') || qTime.includes('1st') || qTime.includes('2nd') || qTime.includes('3rd') || qTime.includes('Half') || qTime.includes('OT')));
+      const isLive =
+        rawStatus === 'live' ||
+        (!isFinal &&
+          (qTime.includes('th') ||
+            qTime.includes('1st') ||
+            qTime.includes('2nd') ||
+            qTime.includes('3rd') ||
+            qTime.includes('4th') ||
+            qTime.includes('Q') ||
+            qTime.includes('Half') ||
+            qTime.includes('OT')));
       const isScheduled = !isFinal && !isLive;
 
       const awayScore = Number(row.away_score || 0);
       const homeScore = Number(row.home_score || 0);
 
+      const homeName = sport === 'nba' ? getNBATeamFullName(homeCode) : getTeamFullName(homeCode);
+      const awayName = sport === 'nba' ? getNBATeamFullName(awayCode) : getTeamFullName(awayCode);
+
       return {
         id: String(row.id),
-        sportId: 'nfl',
-        homeTeam: getTeamFullName(homeCode),
-        awayTeam: getTeamFullName(awayCode),
+        sportId: sport,
+        homeTeam: homeName,
+        awayTeam: awayName,
         homeTeamCode: homeCode,
         awayTeamCode: awayCode,
         home_team: homeCode,
@@ -182,24 +285,28 @@ export async function fetchLiveNFLMatches(): Promise<Match[]> {
       };
     });
   } catch (err) {
-    console.warn('⚡ Live Supabase matches fetch encountered exception:', err);
-    return [];
+    console.warn(`⚡ Live Supabase ${sport} matches fetch encountered exception:`, err);
+    return sport === 'nba' ? DEFAULT_NBA_MATCHES : [];
   }
+}
+
+/**
+ * Fetches real NFL games directly from the Supabase matches table.
+ */
+export async function fetchLiveNFLMatches(): Promise<Match[]> {
+  return fetchLiveMatches('nfl');
 }
 
 function sanitizeCompetitorId(id?: string | null): string | null {
   if (!id || typeof id !== 'string') return null;
   const trimmed = id.trim();
   if (!trimmed || trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return null;
-  // If it is a legacy placeholder rather than genuine ID, reject to prevent foreign key errors
   if (['mahomes', 'henry', 'lamb', 'allen', 'jackson', 'barkley', 'jefferson'].includes(trimmed)) return null;
   return trimmed;
 }
 
 /**
- * Upsert picks directly to Supabase table `user_rosters`:
- * { room_code: cleanRoom, user_name: cleanName, star_1_id, star_2_id, star_3_id, device_id: isLocked ? 'LOCKED' : 'UNLOCKED', updated_at: new Date().toISOString() }
- * Uses unique constraint (room_code, user_name).
+ * Upsert picks directly to Supabase table `user_rosters`.
  */
 export async function upsertUserRoster(
   roomCode: string,
@@ -207,7 +314,8 @@ export async function upsertUserRoster(
   star1Id?: string | null,
   star2Id?: string | null,
   star3Id?: string | null,
-  isLocked?: boolean
+  isLocked?: boolean,
+  sport: SportId = 'nfl'
 ): Promise<{ success: boolean; data?: UserRoster }> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   const cleanName = (userName || 'DAD').trim().toUpperCase();
@@ -219,6 +327,7 @@ export async function upsertUserRoster(
   const record: UserRoster = {
     room_code: cleanRoom,
     user_name: cleanName,
+    sport,
     device_id: isLocked ? 'LOCKED' : 'UNLOCKED',
     star_1_id: sanitizedS1 || '',
     star_2_id: sanitizedS2 || '',
@@ -227,9 +336,8 @@ export async function upsertUserRoster(
     updated_at: new Date().toISOString(),
   };
 
-  // Sync to local room cache (keyed strictly by room & user_name)
   try {
-    const localKey = `pixel_pros_rosters_${cleanRoom}`;
+    const localKey = sport === 'nba' ? `pixel_pros_rosters_${cleanRoom}_nba` : `pixel_pros_rosters_${cleanRoom}`;
     const raw = localStorage.getItem(localKey);
     let rosters: UserRoster[] = raw ? JSON.parse(raw) : [];
     const idx = rosters.findIndex(
@@ -242,20 +350,25 @@ export async function upsertUserRoster(
     }
     localStorage.setItem(localKey, JSON.stringify(rosters));
 
-    // Save lock state explicitly per room and user_name
-    localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, isLocked ? 'true' : 'false');
-    // Save user's roster for this specific squad & room
-    localStorage.setItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`, JSON.stringify([record.star_1_id, record.star_2_id, record.star_3_id]));
+    const lockKey = sport === 'nba'
+      ? `pixel_pros_picks_locked_${cleanRoom}_${cleanName}_nba`
+      : `pixel_pros_picks_locked_${cleanRoom}_${cleanName}`;
+    localStorage.setItem(lockKey, isLocked ? 'true' : 'false');
+
+    const rosterKey = sport === 'nba'
+      ? `pixel_pros_roster_${cleanRoom}_${cleanName}_nba`
+      : `pixel_pros_roster_${cleanRoom}_${cleanName}`;
+    localStorage.setItem(rosterKey, JSON.stringify([record.star_1_id, record.star_2_id, record.star_3_id]));
     window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: record }));
   } catch {
     // ignore
   }
 
-  // Upsert to Supabase table user_rosters with onConflict: 'room_code, user_name'
   try {
     const payload: any = {
       room_code: cleanRoom,
       user_name: cleanName,
+      sport,
       star_1_id: sanitizedS1,
       star_2_id: sanitizedS2,
       star_3_id: sanitizedS3,
@@ -285,10 +398,13 @@ export function isGhostUser(name?: string | null): boolean {
   return GHOST_USER_NAMES.includes(name.trim().toUpperCase());
 }
 
-export function getSquadLockState(roomCode: string, userName: string): boolean {
+export function getSquadLockState(roomCode: string, userName: string, sport: SportId = 'nfl'): boolean {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   const cleanName = (userName || 'DAD').trim().toUpperCase();
   try {
+    if (sport === 'nba') {
+      return localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}_nba`) === 'true';
+    }
     return (
       localStorage.getItem(`pixel_locked_${cleanRoom}_${cleanName}`) === 'true' ||
       localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`) === 'true'
@@ -298,28 +414,31 @@ export function getSquadLockState(roomCode: string, userName: string): boolean {
   }
 }
 
-export function setSquadLockState(roomCode: string, userName: string, locked: boolean): void {
+export function setSquadLockState(roomCode: string, userName: string, locked: boolean, sport: SportId = 'nfl'): void {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   const cleanName = (userName || 'DAD').trim().toUpperCase();
   try {
-    localStorage.setItem(`pixel_locked_${cleanRoom}_${cleanName}`, String(locked));
-    localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, String(locked));
+    if (sport === 'nba') {
+      localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}_nba`, String(locked));
+    } else {
+      localStorage.setItem(`pixel_locked_${cleanRoom}_${cleanName}`, String(locked));
+      localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, String(locked));
+    }
   } catch {
     // ignore
   }
 }
 
 /**
- * Queries user_rosters where room_code = currentRoomCode (strict uppercase).
- * Strict database identity is (room_code, user_name).
+ * Queries user_rosters where room_code = currentRoomCode.
  */
-export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> {
+export async function fetchRoomRosters(roomCode: string, sport: SportId = 'nfl'): Promise<UserRoster[]> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
 
-  // Load local cache first (purging any ghost entries)
   let localRosters: UserRoster[] = [];
   try {
-    const raw = localStorage.getItem(`pixel_pros_rosters_${cleanRoom}`);
+    const localKey = sport === 'nba' ? `pixel_pros_rosters_${cleanRoom}_nba` : `pixel_pros_rosters_${cleanRoom}`;
+    const raw = localStorage.getItem(localKey);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -342,7 +461,11 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
       return localRosters;
     }
 
-    // Merge Supabase records with local records: deduplicate strictly by user_name.toUpperCase()
+    const sportFiltered = data.filter((r: any) => {
+      const rowSport = String(r.sport || 'nfl').toLowerCase();
+      return sport === 'nba' ? rowSport === 'nba' : rowSport !== 'nba';
+    });
+
     const map = new Map<string, UserRoster>();
     localRosters.forEach((r) => {
       if (isGhostUser(r.user_name)) return;
@@ -350,7 +473,7 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
       map.set(key, r);
     });
 
-    data.forEach((r: any) => {
+    sportFiltered.forEach((r: any) => {
       if (isGhostUser(r.user_name)) return;
       const key = (r.user_name || '').trim().toUpperCase();
       if (!key) return;
@@ -361,15 +484,15 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
 
       const rawLocked =
         r.device_id === 'LOCKED' ||
-        getSquadLockState(cleanRoom, key);
+        getSquadLockState(cleanRoom, key, sport);
 
-      // STRICT GUARD: A squad with < 3 stars CAN NEVER BE LOCKED
       const isLocked = starCount === 3 && rawLocked;
 
       const entry: UserRoster = {
         id: r.id,
         room_code: (r.room_code || '').toUpperCase(),
         user_name: key,
+        sport: r.sport || sport,
         device_id: isLocked ? 'LOCKED' : 'UNLOCKED',
         star_1_id: r.star_1_id || '',
         star_2_id: r.star_2_id || '',
@@ -389,32 +512,42 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
 /**
  * Deletes a squad/user_roster entry from Supabase and local cache.
  */
-export async function deleteUserRoster(roomCode: string, userName: string): Promise<boolean> {
+export async function deleteUserRoster(roomCode: string, userName: string, sport: SportId = 'nfl'): Promise<boolean> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   const cleanName = (userName || '').trim().toUpperCase();
   if (!cleanName) return false;
 
   try {
-    // 1. Remove from localStorage cache
-    const localKey = `pixel_pros_rosters_${cleanRoom}`;
-    const raw = localStorage.getItem(localKey);
-    if (raw) {
-      const rosters: UserRoster[] = JSON.parse(raw);
-      const filtered = rosters.filter((r) => r.user_name.toUpperCase() !== cleanName);
-      localStorage.setItem(localKey, JSON.stringify(filtered));
-    }
+    const localKeys = [
+      sport === 'nba' ? `pixel_pros_rosters_${cleanRoom}_nba` : `pixel_pros_rosters_${cleanRoom}`,
+      `pixel_pros_rosters_${cleanRoom}`,
+      `pixel_pros_rosters_${cleanRoom}_${sport}`,
+    ];
+    localKeys.forEach((key) => {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const rosters: UserRoster[] = JSON.parse(raw);
+          const filtered = rosters.filter((r) => r.user_name.toUpperCase() !== cleanName);
+          localStorage.setItem(key, JSON.stringify(filtered));
+        } catch {
+          // ignore
+        }
+      }
+    });
     localStorage.removeItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`);
+    localStorage.removeItem(`pixel_pros_roster_${cleanRoom}_${cleanName}_${sport}`);
     localStorage.removeItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`);
+    localStorage.removeItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}_${sport}`);
     localStorage.removeItem(`pixel_locked_${cleanRoom}_${cleanName}`);
 
-    // 2. Delete from Supabase
     await supabase
       .from('user_rosters')
       .delete()
       .eq('room_code', cleanRoom)
       .eq('user_name', cleanName);
 
-    window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: { room_code: cleanRoom, user_name: cleanName, deleted: true } }));
+    window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: { room_code: cleanRoom, user_name: cleanName, deleted: true, sport } }));
     return true;
   } catch (err) {
     console.warn('deleteUserRoster error:', err);
@@ -430,22 +563,16 @@ export async function resetRoomRosters(roomCode: string): Promise<boolean> {
   if (!cleanRoom) return false;
 
   try {
-    // 1. Remove all room records from localStorage
-    try {
-      localStorage.removeItem(`pixel_pros_rosters_${cleanRoom}`);
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && (k.includes(`_${cleanRoom}_`) || k.endsWith(`_${cleanRoom}`))) {
-          keysToRemove.push(k);
-        }
+    localStorage.removeItem(`pixel_pros_rosters_${cleanRoom}`);
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.includes(`_${cleanRoom}_`) || k.endsWith(`_${cleanRoom}`))) {
+        keysToRemove.push(k);
       }
-      keysToRemove.forEach((k) => localStorage.removeItem(k));
-    } catch {
-      // ignore
     }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
 
-    // 2. Delete all records for room_code from Supabase
     await supabase
       .from('user_rosters')
       .delete()
@@ -461,7 +588,6 @@ export async function resetRoomRosters(roomCode: string): Promise<boolean> {
 
 /**
  * Subscribes to Realtime Postgres changes specifically for a room's user_rosters.
- * Instant zero-lag sync across multiple devices in the room.
  */
 export function subscribeToRoomRosters(roomCode: string, onUpdate: () => void) {
   const clean = (roomCode || 'COUCH').trim().toUpperCase();
@@ -487,7 +613,6 @@ export function subscribeToRoomRosters(roomCode: string, onUpdate: () => void) {
 
 /**
  * Subscribes to Realtime Postgres changes on competitors, matches, and user_rosters.
- * Zero polling, zero page reloads — numbers flip instantly on write.
  */
 export function subscribeToRealtimeScores(
   onCompetitorUpdate: (payload: any) => void,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { SportId } from '../types';
 
 interface ScoringTile {
   title: string;
@@ -8,8 +9,12 @@ interface ScoringTile {
   badgeColor: string;
 }
 
-export const SimpleRulesView: React.FC = () => {
-  const scoringTiles: ScoringTile[] = [
+interface SimpleRulesViewProps {
+  sport?: SportId;
+}
+
+export const SimpleRulesView: React.FC<SimpleRulesViewProps> = ({ sport = 'nfl' }) => {
+  const nflTiles: ScoringTile[] = [
     {
       title: 'TOUCHDOWN',
       points: '+6 PTS',
@@ -40,10 +45,45 @@ export const SimpleRulesView: React.FC = () => {
     },
   ];
 
+  const nbaTiles: ScoringTile[] = [
+    {
+      title: '3-POINTER',
+      points: '+2 PTS',
+      desc: 'Splash from beyond the arc.',
+      badgeColor: 'bg-[#ea580c] text-white border-[#9a3412]',
+      icon: '🎯',
+    },
+    {
+      title: 'BIG STOP',
+      points: '+3 PTS',
+      desc: 'Steal or emphatic block.',
+      badgeColor: 'bg-[#b45309] text-white border-[#78350f]',
+      icon: '🛡️',
+    },
+    {
+      title: 'REBOUND',
+      points: '+1 PT',
+      desc: 'Board off the glass or rim.',
+      badgeColor: 'bg-[#15803d] text-white border-[#14532d]',
+      icon: '🏀',
+    },
+    {
+      title: 'ASSIST',
+      points: '+1 PT',
+      desc: 'Dish to a scoring teammate.',
+      badgeColor: 'bg-[#1d4ed8] text-white border-[#1e3a8a]',
+      icon: '👟',
+    },
+  ];
+
+  const scoringTiles = sport === 'nba' ? nbaTiles : nflTiles;
+
   return (
     <div className="w-full space-y-2.5 sm:space-y-3 animate-in fade-in duration-150">
       <p className="text-center font-retro text-xs sm:text-sm text-[#fae5b8]/85">
-        Easy whole-number points. Simple math on your fingers!
+        {sport === 'nba'
+          ? 'Fast hardwood scoring! Plus +1 PT for every 3 real-world game points.'
+          : 'Easy whole-number points. Simple math on your fingers!'}
       </p>
 
       {/* 2x2 Grid of Compact Non-Scrollable Retro Tiles */}
@@ -85,7 +125,9 @@ export const SimpleRulesView: React.FC = () => {
       {/* Warm Retro Banner Across Bottom */}
       <div className="pixel-box-cream p-2 sm:p-2.5 rounded-xs border-2 border-[#c99a57] shadow-xs text-center">
         <p className="font-retro text-[11px] sm:text-xs text-[#5c3509] font-bold">
-          💡 TIP: Pick any 3 stars. No salary caps or position limits!
+          {sport === 'nba'
+            ? '💡 TIP: Zero position limits—pick any 3 superstars you want (e.g., 3 guards or 2 centers)!'
+            : '💡 TIP: Pick any 3 stars. No salary caps or position limits!'}
         </p>
       </div>
     </div>

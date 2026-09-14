@@ -1,10 +1,11 @@
 import React from 'react';
-import { Competitor } from '../types';
+import { Competitor, SportId } from '../types';
 import { PixelPlayerSprite } from './PixelPlayerSprite';
 import { X, Activity } from 'lucide-react';
 
 interface PlayerCardModalProps {
   player: Competitor | null;
+  sport?: SportId;
   onClose: () => void;
   onSelectForTeam?: (player: Competitor) => void;
   onSwapThisStar?: (player: Competitor) => void;
@@ -14,6 +15,7 @@ interface PlayerCardModalProps {
 
 export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
   player: selectedPlayer,
+  sport = 'nfl',
   onClose,
   onSelectForTeam,
   onSwapThisStar,
@@ -22,6 +24,7 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
 }) => {
   if (!selectedPlayer) return null;
 
+  // NFL Stats
   const passYds = Number(
     selectedPlayer.stats?.pass_yds ??
     selectedPlayer.stats?.passing_yards ??
@@ -48,15 +51,30 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
   );
   const tdPoints = tds * 6;
   const yardPoints = Math.floor(totalScrimmageYds / 10);
-  const calculatedTotal = tdPoints + yardPoints;
-  const displayScore = selectedPlayer.score || calculatedTotal;
+  const calculatedNflTotal = tdPoints + yardPoints;
+
+  // NBA Stats
+  const threePm = Number(selectedPlayer.stats?.three_pm ?? selectedPlayer.stats?.threes ?? 0);
+  const reb = Number(selectedPlayer.stats?.reb ?? selectedPlayer.stats?.rebounds ?? 0);
+  const ast = Number(selectedPlayer.stats?.ast ?? selectedPlayer.stats?.assists ?? 0);
+  const pts = Number(selectedPlayer.stats?.pts ?? selectedPlayer.stats?.points ?? 0);
+  const bigStops = Number(selectedPlayer.stats?.big_stops ?? 0);
+  const nbaThreePts = threePm * 2;
+  const nbaAstPts = ast * 1;
+  const nbaRebPts = reb * 1;
+  const nbaStopPts = bigStops * 3;
+  const nbaGamePts = Math.floor(pts / 3);
+  const calculatedNbaTotal = nbaThreePts + nbaAstPts + nbaRebPts + nbaStopPts + nbaGamePts;
+
+  const displayScore =
+    selectedPlayer.score ?? (sport === 'nba' ? calculatedNbaTotal : calculatedNflTotal);
+  const isOnFire = sport === 'nba' && displayScore >= 40;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-      {/* Outer Card Container */}
       <div className="inspector-modal w-[92vw] max-w-[440px] mx-auto box-border overflow-x-hidden relative p-3.5 sm:p-4 bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] rounded-xs my-auto max-h-[90vh] flex flex-col justify-between overflow-y-auto">
         
-        {/* Modal Header: Authentic Player Name & Team / Number with Close [X] Button */}
+        {/* Header */}
         <div className="modal-header flex justify-between items-start w-full mb-2 sm:mb-3 pb-2 sm:pb-2.5 border-b-2 border-[#e2ba7d] shrink-0">
           <div className="text-left flex-1 min-w-0 pr-2">
             <h2 className="font-pixel text-lg sm:text-2xl text-[#5c3509] tracking-wider uppercase leading-tight truncate">
@@ -76,7 +94,6 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
             </div>
           </div>
 
-          {/* Red Close Button Inside Header - No Negative Offsets */}
           <button
             type="button"
             onClick={onClose}
@@ -87,10 +104,8 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           </button>
         </div>
 
-        {/* Clean Athlete Presentation: Sprite + Live Score */}
+        {/* Presentation: Sprite + Live Score */}
         <div className="grid grid-cols-2 gap-2 sm:gap-3 shrink-0">
-          
-          {/* Left: Player Sprite & Identity (Scaled down to compact ~80-90px on mobile) */}
           <div className="bg-[#ebd2a4] border-2 border-[#c99a57] rounded-xs flex flex-col items-center justify-center p-2 sm:p-3 min-h-[110px] sm:min-h-[150px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
             <div className="sm:hidden scale-80 origin-center -my-2">
               <PixelPlayerSprite
@@ -99,6 +114,8 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
                 size="md"
                 withShadow={true}
                 animate={true}
+                sport={sport}
+                isOnFire={isOnFire}
               />
             </div>
             <div className="hidden sm:block">
@@ -108,6 +125,8 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
                 size="lg"
                 withShadow={true}
                 animate={true}
+                sport={sport}
+                isOnFire={isOnFire}
               />
             </div>
             <div className="mt-1 sm:mt-2 px-1.5 sm:px-2.5 py-0.5 bg-[#fae5b8] border border-[#c99a57] text-[#5c3509] font-pixel text-[8px] sm:text-[9px] rounded-xs uppercase tracking-wider font-bold truncate max-w-full">
@@ -115,7 +134,6 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
             </div>
           </div>
 
-          {/* Right: Big Score Readout */}
           <div className="bg-[#ebd2a4] border-2 border-[#c99a57] p-2 sm:p-3 rounded-xs text-center flex flex-col items-center justify-center min-h-[110px] sm:min-h-[150px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
             <div className="flex items-center gap-1 text-[#5c3509] font-pixel text-[9px] sm:text-[11px] uppercase tracking-wider mb-0.5">
               <Activity size={12} className="text-[#16a34a]" />
@@ -130,55 +148,52 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
               WHOLE NUMBER
             </div>
           </div>
-
         </div>
 
-        {/* In-Game Raw Stats Boxes */}
+        {/* Stats Row */}
         <div className="mt-2.5 sm:mt-3 w-full box-border">
-          <div className="grid grid-cols-4 gap-1 w-full box-border text-center">
-            {/* Pass Yards Box */}
-            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
-              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
-                PASS YDS
-              </span>
-              <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">
-                {passYds}
-              </span>
+          {sport === 'nba' ? (
+            <div className="grid grid-cols-4 gap-1 w-full box-border text-center">
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">3PM</span>
+                <span className="font-pixel text-xs sm:text-base text-[#b45309] font-bold truncate">{threePm}</span>
+              </div>
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">REB</span>
+                <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">{reb}</span>
+              </div>
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">AST</span>
+                <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">{ast}</span>
+              </div>
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">PTS</span>
+                <span className="font-pixel text-xs sm:text-base text-[#12579b] font-bold truncate">{pts}</span>
+              </div>
             </div>
-
-            {/* Rush Yards Box */}
-            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
-              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
-                RUSH YDS
-              </span>
-              <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">
-                {rushYds}
-              </span>
+          ) : (
+            <div className="grid grid-cols-4 gap-1 w-full box-border text-center">
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">PASS YDS</span>
+                <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">{passYds}</span>
+              </div>
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">RUSH YDS</span>
+                <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">{rushYds}</span>
+              </div>
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">REC YDS</span>
+                <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">{recYds}</span>
+              </div>
+              <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
+                <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">TD</span>
+                <span className="font-pixel text-xs sm:text-base text-[#b45309] font-bold truncate">{tds}</span>
+              </div>
             </div>
-
-            {/* Rec Yards Box */}
-            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
-              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
-                REC YDS
-              </span>
-              <span className="font-pixel text-xs sm:text-base text-[#5c3509] truncate">
-                {recYds}
-              </span>
-            </div>
-
-            {/* Touchdowns Box */}
-            <div className="min-w-0 p-1 bg-[#fae9c8] border border-[#d4a86a] rounded-xs flex flex-col justify-center items-center shadow-2xs text-center">
-              <span className="block font-retro text-[8px] sm:text-[9px] text-[#784610] uppercase tracking-wider font-bold whitespace-nowrap">
-                TD
-              </span>
-              <span className="font-pixel text-xs sm:text-base text-[#b45309] font-bold truncate">
-                {tds}
-              </span>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Exact Points Breakdown - Clear Math for Kids & Parents */}
+        {/* Points Breakdown */}
         <div className="mt-3 p-2.5 bg-[#ebd2a4] border-2 border-[#c99a57] rounded-xs shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
           <div className="pb-1 mb-1.5 border-b border-[#c99a57] flex items-center justify-between">
             <span className="font-pixel text-[10px] sm:text-[11px] text-[#5c3509] tracking-wider uppercase flex items-center gap-1 font-bold">
@@ -191,35 +206,84 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           </div>
 
           <div className="space-y-1.5 text-xs font-retro text-[#5c3509]">
-            {/* Touchdowns */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
-              <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
-                <span>🏈</span>
-                <span>{tds} TOUCHDOWNS</span>
-              </span>
-              <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
-                ....................................................................
-              </span>
-              <span className="text-[#b45309] font-bold shrink-0 ml-1.5 whitespace-nowrap">
-                +{tdPoints} PTS
-              </span>
-            </div>
+            {sport === 'nba' ? (
+              <>
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                  <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                    <span>🎯</span><span>{threePm} 3-POINTERS</span>
+                  </span>
+                  <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                    ....................................................................
+                  </span>
+                  <span className="text-[#b45309] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{nbaThreePts} PTS</span>
+                </div>
 
-            {/* Scrimmage Yards */}
-            <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
-              <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
-                <span>⚡</span>
-                <span>{totalScrimmageYds} SCRIMMAGE YDS</span>
-              </span>
-              <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
-                ....................................................................
-              </span>
-              <span className="text-[#12579b] font-bold shrink-0 ml-1.5 whitespace-nowrap">
-                +{yardPoints} PTS
-              </span>
-            </div>
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                  <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                    <span>🤝</span><span>{ast} ASSISTS</span>
+                  </span>
+                  <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                    ....................................................................
+                  </span>
+                  <span className="text-[#12579b] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{nbaAstPts} PTS</span>
+                </div>
 
-            {/* Total: {player.score} PTS */}
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                  <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                    <span>🏀</span><span>{reb} REBOUNDS</span>
+                  </span>
+                  <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                    ....................................................................
+                  </span>
+                  <span className="text-[#12579b] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{nbaRebPts} PTS</span>
+                </div>
+
+                {bigStops > 0 && (
+                  <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                    <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                      <span>🛡️</span><span>{bigStops} BIG STOPS</span>
+                    </span>
+                    <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                      ....................................................................
+                    </span>
+                    <span className="text-[#15803d] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{nbaStopPts} PTS</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                  <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                    <span>⚡</span><span>{pts} REAL PTS (1/3)</span>
+                  </span>
+                  <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                    ....................................................................
+                  </span>
+                  <span className="text-[#12579b] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{nbaGamePts} PTS</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                  <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                    <span>🏈</span><span>{tds} TOUCHDOWNS</span>
+                  </span>
+                  <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                    ....................................................................
+                  </span>
+                  <span className="text-[#b45309] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{tdPoints} PTS</span>
+                </div>
+
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#fae5b8] border border-[#d4a86a] rounded-xs font-pixel text-[11px] sm:text-xs whitespace-nowrap overflow-hidden">
+                  <span className="flex items-center gap-1.5 font-bold text-[#5c3509] shrink-0 whitespace-nowrap">
+                    <span>⚡</span><span>{totalScrimmageYds} SCRIMMAGE YDS</span>
+                  </span>
+                  <span className="mx-1.5 text-[#c99a57] font-normal flex-1 overflow-hidden whitespace-nowrap select-none opacity-70">
+                    ....................................................................
+                  </span>
+                  <span className="text-[#12579b] font-bold shrink-0 ml-1.5 whitespace-nowrap">+{yardPoints} PTS</span>
+                </div>
+              </>
+            )}
+
             <div className="flex items-center justify-between px-2.5 py-1.5 bg-[#12579b] text-[#fae5b8] border-2 border-[#0a2d52] rounded-xs font-pixel text-xs sm:text-sm font-bold shadow-xs mt-1.5">
               <span className="tracking-wider">TOTAL SCORE:</span>
               <span className="text-[#fde047] text-sm sm:text-base font-bold">
@@ -229,7 +293,7 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           </div>
         </div>
 
-        {/* Action Button: Full-Width Prominence without redundant bottom Close button */}
+        {/* Actions */}
         <div className="mt-3.5 space-y-1.5">
           {isSelectedForTeam ? (
             <button
@@ -251,7 +315,6 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
               type="button"
               onClick={() => {
                 onSelectForTeam?.(selectedPlayer);
-                onClose();
               }}
               className="touch-manipulation w-full py-2.5 px-3 bg-[#15803d] hover:bg-[#16a34a] text-white border-3 border-[#052e16] font-pixel text-[11px] sm:text-xs rounded-xs cursor-pointer shadow-[0_3px_0_0_#022c11] active:translate-y-0.5 transition-all text-center flex items-center justify-center gap-2 font-bold"
             >
@@ -260,7 +323,6 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
             </button>
           )}
 
-          {/* Unobtrusive subtle text link to drop player */}
           {isSelectedForTeam && onDropPlayer && (
             <div className="text-center pt-0.5">
               <button

@@ -87,3 +87,34 @@
   opacity: 0.35;
   pointer-events: none;
 }
+
+/* Basketball Hardwood Court Background Pattern */
+.basketball-court {
+  background: 
+    repeating-linear-gradient(
+      90deg,
+      #78350f 0px,
+      #78350f 24px,
+      #92400e 24px,
+      #92400e 48px,
+      #854d0e 48px,
+      #854d0e 72px
+    );
+  position: relative;
+}
+
+.basketball-court::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.15) 0px,
+      rgba(0, 0, 0, 0.15) 2px,
+      transparent 2px,
+      transparent 64px
+    );
+  opacity: 0.9;
+  pointer-events: none;
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AvatarConfig } from '../types';
+import { AvatarConfig, SportId } from '../types';
 
 interface PixelPlayerSpriteProps {
   avatar?: Partial<AvatarConfig>;
@@ -9,6 +9,8 @@ interface PixelPlayerSpriteProps {
   withShadow?: boolean;
   className?: string;
   animate?: boolean;
+  sport?: SportId;
+  isOnFire?: boolean;
 }
 
 export const PixelPlayerSprite: React.FC<PixelPlayerSpriteProps> = ({
@@ -25,8 +27,10 @@ export const PixelPlayerSprite: React.FC<PixelPlayerSpriteProps> = ({
   withShadow = true,
   className = '',
   animate = false,
+  sport = 'nfl',
+  isOnFire = false,
 }) => {
-  const displayNum = number ?? avatar?.number ?? 88;
+  const displayNum = number ?? avatar?.number ?? (sport === 'nba' ? 23 : 88);
 
   // Scaling dimensions
   const scaleMap: Record<string, { width: number; height: number }> = {
@@ -51,6 +55,49 @@ export const PixelPlayerSprite: React.FC<PixelPlayerSpriteProps> = ({
     height = scaleMap.md.height;
   }
 
+  // NBA SILHOUETTE
+  if (isSilhouette && sport === 'nba') {
+    return (
+      <div
+        className={`relative flex items-center justify-center select-none ${className}`}
+        style={{ width, height }}
+      >
+        <svg
+          viewBox="0 0 36 50"
+          width={width}
+          height={height}
+          style={{ shapeRendering: 'crispEdges' }}
+          className="filter drop-shadow-sm opacity-65 hover:opacity-85 transition-opacity"
+        >
+          <g fill="#a69480">
+            {/* Head / Hair */}
+            <rect x="13" y="5" width="10" height="11" rx="1" />
+            <rect x="12" y="8" width="12" height="8" />
+            {/* Neck */}
+            <rect x="15" y="16" width="6" height="3" fill="#8f7d6a" />
+            {/* Sleeveless Torso (Tank Top) */}
+            <rect x="11" y="19" width="14" height="14" fill="#998774" />
+            {/* Bare Arms */}
+            <rect x="7" y="20" width="4" height="12" />
+            <rect x="25" y="20" width="4" height="12" />
+            {/* Basketball Silhouette */}
+            <circle cx="28" cy="27" r="4" fill="#756453" />
+            {/* Shorts */}
+            <rect x="10" y="32" width="7" height="8" fill="#8a7866" />
+            <rect x="19" y="32" width="7" height="8" fill="#8a7866" />
+            {/* Legs */}
+            <rect x="12" y="40" width="4" height="5" />
+            <rect x="20" y="40" width="4" height="5" />
+            {/* Sneakers */}
+            <rect x="10" y="45" width="6" height="3" fill="#756453" />
+            <rect x="20" y="45" width="6" height="3" fill="#756453" />
+          </g>
+        </svg>
+      </div>
+    );
+  }
+
+  // NFL SILHOUETTE (Strictly unchanged)
   if (isSilhouette) {
     // Exact grey-brown silhouette as seen in Image 2 and 3
     return (
@@ -97,6 +144,136 @@ export const PixelPlayerSprite: React.FC<PixelPlayerSpriteProps> = ({
   const stripe = avatar.stripeColor || '#ffffff';
   const skin = avatar.skinTone || '#d98c55';
 
+  // -------------------------------------------------------------
+  // NBA BASKETBALL SPRITE (Tank top, bare shoulders, basketball)
+  // -------------------------------------------------------------
+  if (sport === 'nba') {
+    return (
+      <div
+        className={`relative flex flex-col items-center justify-center select-none ${className} ${
+          animate ? 'animate-bounce-subtle' : ''
+        }`}
+        style={{ width, height }}
+      >
+        {/* "He's on Fire!" Animated Pixel Flame Halo */}
+        {isOnFire && (
+          <div className="absolute -top-3 inset-x-0 flex justify-center pointer-events-none animate-pulse">
+            <span className="text-xs font-mono font-black text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.9)]">
+              🔥 ON FIRE!
+            </span>
+          </div>
+        )}
+
+        <svg
+          viewBox="0 0 38 52"
+          width={width}
+          height={height}
+          style={{ shapeRendering: 'crispEdges' }}
+          className="overflow-visible"
+        >
+          {/* Flame Backing Pixels when On Fire */}
+          {isOnFire && (
+            <g opacity="0.85">
+              <rect x="6" y="14" width="3" height="6" fill="#ef4444" className="animate-ping" />
+              <rect x="29" y="16" width="3" height="5" fill="#f59e0b" className="animate-ping" />
+              <rect x="10" y="4" width="4" height="4" fill="#fbbf24" />
+              <rect x="24" y="3" width="4" height="5" fill="#ef4444" />
+              <rect x="17" y="1" width="4" height="4" fill="#f59e0b" />
+            </g>
+          )}
+
+          {/* Hardwood Floor Shadow */}
+          {withShadow && (
+            <ellipse
+              cx="19"
+              cy="48.5"
+              rx="13"
+              ry="3"
+              fill="#3a200a"
+              opacity="0.55"
+            />
+          )}
+
+          {/* 1. HEAD & HAIR / HEADBAND */}
+          {/* Hair base */}
+          <rect x="12" y="4" width="14" height="12" fill="#1c110a" />
+          <rect x="10" y="6" width="18" height="8" fill="#1c110a" />
+          {/* Headband with team stripe color */}
+          <rect x="11" y="8" width="16" height="3" fill={stripe} />
+          {/* Face Skin */}
+          <rect x="12" y="11" width="14" height="8" fill={skin} />
+          {/* Pixel Eyes */}
+          <rect x="14" y="13" width="2" height="2" fill="#180e07" />
+          <rect x="22" y="13" width="2" height="2" fill="#180e07" />
+          {/* Mouth / Jawline */}
+          <rect x="16" y="17" width="6" height="1.5" fill="#3a200a" opacity="0.4" />
+
+          {/* 2. TANK TOP / SLEEVELESS JERSEY */}
+          {/* Bare Pixel Shoulders / Arms */}
+          <rect x="7" y="20" width="4" height="13" fill={skin} />
+          <rect x="27" y="20" width="4" height="12" fill={skin} />
+
+          {/* Tank Top Body */}
+          <rect x="11" y="19" width="16" height="15" fill={jersey} />
+          {/* Tank top armhole cutouts (revealing skin) */}
+          <rect x="11" y="19" width="2" height="6" fill={skin} />
+          <rect x="25" y="19" width="2" height="6" fill={skin} />
+          {/* Tank top collar trim */}
+          <rect x="14" y="19" width="10" height="2" fill={stripe} />
+          {/* Side stripes on tank top */}
+          <rect x="11" y="25" width="1.5" height="9" fill={stripe} />
+          <rect x="25.5" y="25" width="1.5" height="9" fill={stripe} />
+
+          {/* Basketball held in left hand */}
+          <circle cx="29" cy="32" r="4.5" fill="#ea580c" />
+          {/* Basketball black rib lines */}
+          <rect x="26" y="31.5" width="6" height="1" fill="#1c1917" />
+          <line x1="29" y1="28" x2="29" y2="36" stroke="#1c1917" strokeWidth="1" />
+
+          {/* Jersey Number */}
+          <text
+            x="19"
+            y="29"
+            textAnchor="middle"
+            fill="#ffffff"
+            fontFamily="'Press Start 2P', monospace"
+            fontSize="7"
+            fontWeight="bold"
+            stroke="#000000"
+            strokeWidth="0.5"
+          >
+            {displayNum}
+          </text>
+
+          {/* 3. BASKETBALL SHORTS */}
+          <rect x="10" y="34" width="8" height="8" fill={jersey} />
+          <rect x="20" y="34" width="8" height="8" fill={jersey} />
+          {/* Shorts Trim */}
+          <rect x="9.5" y="40.5" width="8.5" height="1.5" fill={stripe} />
+          <rect x="20" y="40.5" width="8.5" height="1.5" fill={stripe} />
+
+          {/* 4. LEGS & KNEE PADS */}
+          <rect x="12" y="42" width="4.5" height="3" fill={skin} />
+          <rect x="21.5" y="42" width="4.5" height="3" fill={skin} />
+
+          {/* 5. CREW SOCKS & SNEAKERS */}
+          {/* White crew socks */}
+          <rect x="11.5" y="44" width="5" height="2.5" fill="#ffffff" />
+          <rect x="21" y="44" width="5" height="2.5" fill="#ffffff" />
+          {/* High-top Basketball Sneakers */}
+          <rect x="10" y="46.5" width="7.5" height="2.5" fill={jersey} />
+          <rect x="20.5" y="46.5" width="7.5" height="2.5" fill={jersey} />
+          {/* Sneaker Rubber Sole */}
+          <rect x="9.5" y="48.5" width="8" height="1" fill="#ffffff" />
+          <rect x="20" y="48.5" width="8" height="1" fill="#ffffff" />
+        </svg>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // NFL FOOTBALL SPRITE (100% UNTOUCHED, EXACT ORIGINAL DESIGN)
+  // -------------------------------------------------------------
   return (
     <div
       className={`relative flex flex-col items-center justify-center select-none ${className} ${

@@ -203,6 +203,45 @@ ON CONFLICT (id) DO UPDATE SET
     team_code = EXCLUDED.team_code,
     stats = EXCLUDED.stats;
 
+-- 9b. NBA EXPANSION MIGRATION & SEED DATA
+-- Adds 'sport' column to tables if not already present, ensuring zero regressions on NFL
+ALTER TABLE public.competitors ADD COLUMN IF NOT EXISTS sport TEXT DEFAULT 'nfl';
+ALTER TABLE public.matches ADD COLUMN IF NOT EXISTS sport TEXT DEFAULT 'nfl';
+ALTER TABLE public.user_rosters ADD COLUMN IF NOT EXISTS sport TEXT DEFAULT 'nfl';
+
+-- Create compound index for sport filtering
+CREATE INDEX IF NOT EXISTS idx_competitors_sport_filter ON public.competitors(sport);
+CREATE INDEX IF NOT EXISTS idx_matches_sport_filter ON public.matches(sport);
+CREATE INDEX IF NOT EXISTS idx_user_rosters_sport_filter ON public.user_rosters(room_code, sport);
+
+-- Seed Authentic NBA Competitors
+INSERT INTO public.competitors (id, sport_id, sport, display_name, short_name, team_name, team_code, uniform_number, position_generic, score, stats, avatar_config) VALUES
+('nba-lebron-james', 'nba', 'nba', 'LeBron James', 'JAMES', 'Los Angeles Lakers', 'LAL', 23, 'PLAYMAKER', 38, '{"pts": 26, "threes": 3, "reb": 8, "ast": 9, "big_stops": 2}'::jsonb, '{"helmetColor": "#552583", "jerseyColor": "#552583", "stripeColor": "#fdb927", "skinTone": "#5c3509", "number": 23}'::jsonb),
+('nba-stephen-curry', 'nba', 'nba', 'Stephen Curry', 'CURRY', 'Golden State Warriors', 'GSW', 30, 'SCORER', 41, '{"pts": 32, "threes": 7, "reb": 5, "ast": 6, "big_stops": 2}'::jsonb, '{"helmetColor": "#1d428a", "jerseyColor": "#1d428a", "stripeColor": "#ffc72c", "skinTone": "#d98c55", "number": 30}'::jsonb),
+('nba-luka-doncic', 'nba', 'nba', 'Luka Dončić', 'DONČIĆ', 'Dallas Mavericks', 'DAL', 77, 'PLAYMAKER', 46, '{"pts": 34, "threes": 4, "reb": 9, "ast": 12, "big_stops": 2}'::jsonb, '{"helmetColor": "#00538c", "jerseyColor": "#00538c", "stripeColor": "#002b5e", "skinTone": "#f7d7b5", "number": 77}'::jsonb),
+('nba-nikola-jokic', 'nba', 'nba', 'Nikola Jokić', 'JOKIĆ', 'Denver Nuggets', 'DEN', 15, 'PLAYMAKER', 47, '{"pts": 27, "threes": 2, "reb": 13, "ast": 11, "big_stops": 3}'::jsonb, '{"helmetColor": "#0e2240", "jerseyColor": "#0e2240", "stripeColor": "#fec524", "skinTone": "#f7d7b5", "number": 15}'::jsonb),
+('nba-giannis-antetokounmpo', 'nba', 'nba', 'Giannis Antetokounmpo', 'GIANNIS', 'Milwaukee Bucks', 'MIL', 34, 'OFFENSE', 43, '{"pts": 31, "threes": 0, "reb": 12, "ast": 6, "big_stops": 3}'::jsonb, '{"helmetColor": "#00471b", "jerseyColor": "#00471b", "stripeColor": "#eee1c6", "skinTone": "#5c3509", "number": 34}'::jsonb),
+('nba-jayson-tatum', 'nba', 'nba', 'Jayson Tatum', 'TATUM', 'Boston Celtics', 'BOS', 0, 'SCORER', 39, '{"pts": 29, "threes": 4, "reb": 8, "ast": 5, "big_stops": 2}'::jsonb, '{"helmetColor": "#007a33", "jerseyColor": "#007a33", "stripeColor": "#ba9653", "skinTone": "#8c532b", "number": 0}'::jsonb),
+('nba-anthony-edwards', 'nba', 'nba', 'Anthony Edwards', 'EDWARDS', 'Minnesota Timberwolves', 'MIN', 5, 'SCORER', 36, '{"pts": 28, "threes": 4, "reb": 5, "ast": 5, "big_stops": 3}'::jsonb, '{"helmetColor": "#0c2340", "jerseyColor": "#0c2340", "stripeColor": "#236192", "skinTone": "#5c3509", "number": 5}'::jsonb),
+('nba-victor-wembanyama', 'nba', 'nba', 'Victor Wembanyama', 'WEMBY', 'San Antonio Spurs', 'SAS', 1, 'DEFENSE', 44, '{"pts": 24, "threes": 3, "reb": 11, "ast": 4, "big_stops": 5}'::jsonb, '{"helmetColor": "#c4ced4", "jerseyColor": "#000000", "stripeColor": "#c4ced4", "skinTone": "#8c532b", "number": 1}'::jsonb),
+('nba-shai-gilgeous-alexander', 'nba', 'nba', 'Shai Gilgeous-Alexander', 'SHAI', 'Oklahoma City Thunder', 'OKC', 2, 'SCORER', 42, '{"pts": 31, "threes": 2, "reb": 6, "ast": 7, "big_stops": 3}'::jsonb, '{"helmetColor": "#007ac1", "jerseyColor": "#007ac1", "stripeColor": "#ef3b24", "skinTone": "#5c3509", "number": 2}'::jsonb),
+('nba-anthony-davis', 'nba', 'nba', 'Anthony Davis', 'DAVIS', 'Los Angeles Lakers', 'LAL', 3, 'DEFENSE', 41, '{"pts": 25, "threes": 1, "reb": 12, "ast": 3, "big_stops": 4}'::jsonb, '{"helmetColor": "#552583", "jerseyColor": "#552583", "stripeColor": "#fdb927", "skinTone": "#8c532b", "number": 3}'::jsonb)
+ON CONFLICT (id) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    score = EXCLUDED.score,
+    team_name = EXCLUDED.team_name,
+    team_code = EXCLUDED.team_code,
+    stats = EXCLUDED.stats;
+
+-- Seed Active NBA Matches
+INSERT INTO public.matches (id, sport_id, sport, home_competitor_name, away_competitor_name, scheduled_at, status, period_label, home_score, away_score) VALUES
+('22222222-2222-2222-2222-222222222201', 'nba', 'nba', 'LAL', 'GSW', NOW(), 'live', '🔴 Q4 02:45', 104, 101),
+('22222222-2222-2222-2222-222222222202', 'nba', 'nba', 'BOS', 'PHI', NOW(), 'final', 'Final', 118, 112),
+('22222222-2222-2222-2222-222222222203', 'nba', 'nba', 'DAL', 'DEN', NOW(), 'live', '🔴 Q3 06:18', 89, 92),
+('22222222-2222-2222-2222-222222222204', 'nba', 'nba', 'SAS', 'PHX', NOW() + INTERVAL '2 hours', 'upcoming', 'TONIGHT 8:30P', 0, 0),
+('22222222-2222-2222-2222-222222222205', 'nba', 'nba', 'OKC', 'MIN', NOW() + INTERVAL '3 hours', 'upcoming', 'TONIGHT 9:00P', 0, 0)
+ON CONFLICT (id) DO NOTHING;
+
 -- =========================================================================
 -- 10. SUPABASE REALTIME WIRE REPLICATION
 -- Subscribes the frontend to changes on competitors and matches tables.

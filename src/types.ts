@@ -107,6 +107,7 @@ export interface UserRoster {
   id?: string;
   room_code: string;
   user_name: string;
+  sport?: SportId;
   device_id?: string;
   star_1_id: string;
   star_2_id: string;
