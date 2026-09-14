@@ -4,6 +4,7 @@ import {
 } from './data/mockData';
 import { Competitor, UserProfile, Match, UserRoster, ActiveSlot, SquadSlots } from './types';
 import {
+  supabase,
   subscribeToRealtimeScores,
   subscribeToRoomRosters,
   fetchLiveNFLCompetitors,
@@ -11,6 +12,9 @@ import {
   upsertUserRoster,
   fetchRoomRosters,
   deleteUserRoster,
+  resetRoomRosters,
+  getSquadLockState,
+  setSquadLockState,
   isGhostUser,
 } from './lib/supabaseClient';
 import { getDeviceId } from './lib/deviceIdentity';
@@ -33,11 +37,14 @@ export default function App() {
   // Room Code & User Name state
   const [userName, setUserName] = useState<string>(() => {
     try {
-      return (localStorage.getItem('pixel_pros_user_name') || 'DAD').trim().toUpperCase();
+      const saved = localStorage.getItem('pixel_pros_user_name');
+      return saved ? saved.trim().toUpperCase() : '';
     } catch {
-      return 'DAD';
+      return '';
     }
   });
+
+  const [isAddSquadDrawerOpen, setIsAddSquadDrawerOpen] = useState(false);
 
   const [roomCode, setRoomCode] = useState<string>(() => {
     try {
@@ -62,15 +69,31 @@ export default function App() {
   // Track activeSlot ('star1' | 'star2' | 'star3') when tapping a slot
   const [activeSlot, setActiveSlot] = useState<ActiveSlot | null>(null);
 
-  // Lock Picks Engine State (persisted per room and user_name)
+  // Lock Picks Engine State (strictly isolated per room and user_name)
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     try {
       const cleanRoom = (localStorage.getItem('pixel_pros_room_code') || 'COUCH').trim().toUpperCase();
-      const cleanName = (localStorage.getItem('pixel_pros_user_name') || 'DAD').trim().toUpperCase();
-      return localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`) === 'true';
+      const cleanName = (localStorage.getItem('pixel_pros_user_name') || '').trim().toUpperCase();
+      return cleanName ? getSquadLockState(cleanRoom, cleanName) : false;
     } catch {
       return false;
     }
+  });
+
+  // Recent Room codes history
+  const [recentRooms, setRecentRooms] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('pixel_pros_recent_rooms');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((r: string) => r.trim().toUpperCase()).filter(Boolean);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return ['COUCH', 'CUSE001', 'SUPERBOWL'];
   });
 
   // Modals state
@@ -100,17 +123,20 @@ export default function App() {
       const s1Id = slotsObj.star1 ? slotsObj.star1.id : '';
       const s2Id = slotsObj.star2 ? slotsObj.star2.id : '';
       const s3Id = slotsObj.star3 ? slotsObj.star3.id : '';
-      const finalLocked = typeof lockedFlag === 'boolean' ? lockedFlag : isLocked;
+      const count = [slotsObj.star1, slotsObj.star2, slotsObj.star3].filter(Boolean).length;
+      const rawLocked = typeof lockedFlag === 'boolean' ? lockedFlag : isLocked;
+      // Guard condition: A squad with < 3 stars CAN NEVER BE LOCKED
+      const guardedLocked = count === 3 && rawLocked;
 
-      // Save squad-specific roster to localStorage
+      // Save squad-specific roster and lock state
+      setSquadLockState(normalizedRoom, cleanName, guardedLocked);
       try {
         localStorage.setItem(`pixel_pros_roster_${normalizedRoom}_${cleanName}`, JSON.stringify([s1Id, s2Id, s3Id]));
-        localStorage.setItem(`pixel_pros_picks_locked_${normalizedRoom}_${cleanName}`, String(finalLocked));
       } catch {
         // ignore
       }
 
-      await upsertUserRoster(normalizedRoom, cleanName, s1Id, s2Id, s3Id, finalLocked);
+      await upsertUserRoster(normalizedRoom, cleanName, s1Id, s2Id, s3Id, guardedLocked);
       // Refresh room rosters
       const updated = await fetchRoomRosters(normalizedRoom);
       setRoomRosters(updated);
@@ -138,17 +164,11 @@ export default function App() {
     let s1: Competitor | null = null;
     let s2: Competitor | null = null;
     let s3: Competitor | null = null;
-    let squadLocked = false;
 
     if (existingRoster) {
       s1 = roster.find((p) => p.id === existingRoster.star_1_id) || null;
       s2 = roster.find((p) => p.id === existingRoster.star_2_id) || null;
       s3 = roster.find((p) => p.id === existingRoster.star_3_id) || null;
-      squadLocked = Boolean(
-        existingRoster.is_locked ||
-        existingRoster.device_id === 'LOCKED' ||
-        localStorage.getItem(`pixel_pros_picks_locked_${normalizedRoom}_${cleanName}`) === 'true'
-      );
     } else {
       try {
         const saved = localStorage.getItem(`pixel_pros_roster_${normalizedRoom}_${cleanName}`);
@@ -160,14 +180,22 @@ export default function App() {
             s3 = roster.find((p) => p.id === ids[2]) || null;
           }
         }
-        squadLocked = localStorage.getItem(`pixel_pros_picks_locked_${normalizedRoom}_${cleanName}`) === 'true';
       } catch {
         // ignore
       }
     }
 
+    const count = [s1, s2, s3].filter(Boolean).length;
+    const rawLocked = existingRoster
+      ? Boolean(existingRoster.is_locked || existingRoster.device_id === 'LOCKED' || getSquadLockState(normalizedRoom, cleanName))
+      : getSquadLockState(normalizedRoom, cleanName);
+
+    // STRICT GUARD: A squad with < 3 stars CAN NEVER BE LOCKED
+    const squadLocked = count === 3 && rawLocked;
+
     setSquadSlots({ star1: s1, star2: s2, star3: s3 });
     setIsLocked(squadLocked);
+    setSquadLockState(normalizedRoom, cleanName, squadLocked);
     setCurrentTab('squad');
     showToast(`Switched active squad to "${cleanName}"`);
   };
@@ -181,11 +209,11 @@ export default function App() {
     setUserName(cleanName);
     try {
       localStorage.setItem('pixel_pros_user_name', cleanName);
-      localStorage.setItem(`pixel_pros_picks_locked_${normalizedRoom}_${cleanName}`, 'false');
       localStorage.setItem(`pixel_pros_roster_${normalizedRoom}_${cleanName}`, JSON.stringify(['', '', '']));
     } catch {
       // ignore
     }
+    setSquadLockState(normalizedRoom, cleanName, false);
 
     const freshSlots = { star1: null, star2: null, star3: null };
     setSquadSlots(freshSlots);
@@ -208,26 +236,45 @@ export default function App() {
 
     await deleteUserRoster(cleanRoom, cleanName);
 
-    // Immediately update local rosters state so squad vanishes from switcher and leaderboard
-    setRoomRosters((prev) =>
-      prev.filter(
-        (r) => !(r.room_code.toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName)
-      )
-    );
+    // Clean up local storage entries for this squad
+    setSquadLockState(cleanRoom, cleanName, false);
+    try {
+      localStorage.removeItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`);
+      localStorage.removeItem(`pixel_locked_${cleanRoom}_${cleanName}`);
+      localStorage.removeItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`);
+    } catch {
+      // ignore
+    }
 
-    // If active squad was dropped, switch to another squad in the room
+    // Immediately update local rosters state so squad vanishes from switcher and leaderboard
+    const updatedRosters = roomRosters.filter(
+      (r) => !(r.room_code.toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName)
+    );
+    setRoomRosters(updatedRosters);
+
+    // If active squad was dropped, switch to first remaining or clear to empty state
     if (userName.toUpperCase() === cleanName) {
-      const remaining = roomRosters.filter(
-        (r) => r.room_code.toUpperCase() === cleanRoom && r.user_name.toUpperCase() !== cleanName
-      );
-      const nextName = remaining.length > 0 ? remaining[0].user_name.toUpperCase() : 'DAD';
-      setUserName(nextName);
-      try {
-        localStorage.setItem('pixel_pros_user_name', nextName);
-      } catch {
-        // ignore
+      if (updatedRosters.length > 0) {
+        // Switch to the first remaining squad
+        const nextName = updatedRosters[0].user_name.toUpperCase();
+        setUserName(nextName);
+        try {
+          localStorage.setItem('pixel_pros_user_name', nextName);
+        } catch {
+          // ignore
+        }
+        handleSelectSquad(nextName);
+      } else {
+        // All squads deleted: DO NOT fallback to 'DAD'!
+        setUserName('');
+        try {
+          localStorage.removeItem('pixel_pros_user_name');
+        } catch {
+          // ignore
+        }
+        setSquadSlots({ star1: null, star2: null, star3: null });
+        setIsLocked(false);
       }
-      handleSelectSquad(nextName);
     }
 
     showToast(`🗑️ Dropped squad "${cleanName}" from room.`);
@@ -242,7 +289,94 @@ export default function App() {
     } catch {
       // ignore
     }
+
+    // Add to recent rooms list
+    setRecentRooms((prev) => {
+      const filtered = prev.filter((r) => r !== clean);
+      const updated = [clean, ...filtered].slice(0, 6);
+      try {
+        localStorage.setItem('pixel_pros_recent_rooms', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+
     showToast(`🛋️ Room ${clean} synced!`);
+  };
+
+  // Remove room code from recent rooms history
+  const handleRemoveRecentRoom = (roomToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const clean = roomToRemove.trim().toUpperCase();
+    setRecentRooms((prev) => {
+      const updated = prev.filter((r) => r !== clean);
+      try {
+        localStorage.setItem('pixel_pros_recent_rooms', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  };
+
+  // Reset entire room: deletes all rosters from Supabase and local cache
+  const handleResetCurrentRoom = async () => {
+    const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+    const confirmed = window.confirm(`Clear all squads and picks in room "${cleanRoom}"?`);
+    if (!confirmed) return;
+
+    // 1. Execute delete against Supabase
+    try {
+      await supabase
+        .from('user_rosters')
+        .delete()
+        .eq('room_code', cleanRoom);
+    } catch (err) {
+      console.warn('⚡ Error resetting room rosters in Supabase:', err);
+      try {
+        await resetRoomRosters(cleanRoom);
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. Wipe local rosters and active user name
+    setRoomRosters([]);
+    setUserName('');
+    setSquadSlots({ star1: null, star2: null, star3: null });
+    setIsLocked(false);
+    try {
+      localStorage.removeItem('pixel_pros_user_name');
+    } catch {
+      // ignore
+    }
+
+    // 3. Remove all per-squad lock entries from localStorage for that room (pixel_locked_${room}_*)
+    try {
+      localStorage.removeItem(`pixel_pros_rosters_${cleanRoom}`);
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith(`pixel_locked_${cleanRoom}_`) ||
+            k.startsWith(`pixel_pros_picks_locked_${cleanRoom}_`) ||
+            k.startsWith(`pixel_pros_roster_${cleanRoom}_`) ||
+            k.includes(`_${cleanRoom}_`) ||
+            k.endsWith(`_${cleanRoom}`))
+        ) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+
+    // 4. Close the modal and show toast
+    setIsRoomModalOpen(false);
+    showToast(`Room ${cleanRoom} reset to clean state.`);
   };
 
   // Commit User Name
@@ -261,7 +395,14 @@ export default function App() {
 
   // Assign an athlete STRICTLY into activeSlot ('star1' | 'star2' | 'star3')
   const handleAssignSlot = (player: Competitor, targetSlot: ActiveSlot) => {
-    if (isLocked) {
+    if (!userName || !userName.trim()) {
+      setIsAddSquadDrawerOpen(true);
+      showToast('⚠️ Please create a squad first!');
+      return;
+    }
+
+    const filledCount = [squadSlots.star1, squadSlots.star2, squadSlots.star3].filter(Boolean).length;
+    if (filledCount === 3 && isLocked) {
       showToast('🔒 Lineup is LOCKED! Tap UNLOCK PICKS to make substitutions.');
       return;
     }
@@ -276,8 +417,13 @@ export default function App() {
       // Assign strictly to target slot
       next[targetSlot] = player;
 
+      const newCount = [next.star1, next.star2, next.star3].filter(Boolean).length;
+      const willBeLocked = newCount === 3 && isLocked;
+      setIsLocked(willBeLocked);
+      setSquadLockState(roomCode, userName, willBeLocked);
+
       // Persist & sync
-      syncLineupToSupabase(roomCode, userName, next, isLocked);
+      syncLineupToSupabase(roomCode, userName, next, willBeLocked);
       return next;
     });
 
@@ -287,14 +433,14 @@ export default function App() {
 
   // Clear a specific slot to null when [X] is clicked
   const handleClearSlot = (slotKey: ActiveSlot) => {
-    if (isLocked) {
-      showToast('🔒 Lineup is LOCKED! Tap UNLOCK PICKS to modify.');
-      return;
-    }
+    if (!userName || !userName.trim()) return;
 
+    // If fewer than 3 stars are selected, force isLocked to false so slots remain clickable
     setSquadSlots((prev) => {
       const next = { ...prev, [slotKey]: null };
-      syncLineupToSupabase(roomCode, userName, next, isLocked);
+      setIsLocked(false);
+      setSquadLockState(roomCode, userName, false);
+      syncLineupToSupabase(roomCode, userName, next, false);
       return next;
     });
 
@@ -304,23 +450,23 @@ export default function App() {
 
   // Toggle Lock state
   const handleToggleLock = () => {
-    const nextLocked = !isLocked;
+    if (!userName || !userName.trim()) {
+      setIsAddSquadDrawerOpen(true);
+      return;
+    }
+
     const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-    const cleanName = (userName || 'DAD').trim().toUpperCase();
+    const cleanName = userName.trim().toUpperCase();
     const filledCount = [squadSlots.star1, squadSlots.star2, squadSlots.star3].filter(Boolean).length;
 
-    if (nextLocked && filledCount < 3) {
+    if (!isLocked && filledCount < 3) {
       showToast(`⚠️ Please select all 3 Stars before locking! (${filledCount}/3 picked)`);
       return;
     }
 
+    const nextLocked = !isLocked && filledCount === 3;
     setIsLocked(nextLocked);
-    try {
-      localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, String(nextLocked));
-    } catch {
-      // ignore
-    }
-
+    setSquadLockState(cleanRoom, cleanName, nextLocked);
     syncLineupToSupabase(cleanRoom, cleanName, squadSlots, nextLocked);
 
     if (nextLocked) {
@@ -336,7 +482,7 @@ export default function App() {
     async function sync() {
       try {
         const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-        const cleanName = (userName || 'DAD').trim().toUpperCase();
+        let cleanName = (userName || '').trim().toUpperCase();
 
         const [comp, match, rost] = await Promise.all([
           fetchLiveNFLCompetitors(),
@@ -357,48 +503,79 @@ export default function App() {
         }
 
         const athleteList = comp && comp.length > 0 ? comp : [];
-        const dbRoster = (rost || []).find(
-          (r) => (r.room_code || '').toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName
-        );
+        const validRosters = (rost || []).filter((r) => !isGhostUser(r.user_name));
+
+        // Determine if current user exists in this room's rosters
+        if (cleanName && !validRosters.some((r) => r.user_name.toUpperCase() === cleanName)) {
+          if (validRosters.length > 0) {
+            cleanName = validRosters[0].user_name.toUpperCase();
+            setUserName(cleanName);
+            try {
+              localStorage.setItem('pixel_pros_user_name', cleanName);
+            } catch {
+              // ignore
+            }
+          } else {
+            cleanName = '';
+            setUserName('');
+            try {
+              localStorage.removeItem('pixel_pros_user_name');
+            } catch {
+              // ignore
+            }
+          }
+        } else if (!cleanName && validRosters.length > 0) {
+          cleanName = validRosters[0].user_name.toUpperCase();
+          setUserName(cleanName);
+          try {
+            localStorage.setItem('pixel_pros_user_name', cleanName);
+          } catch {
+            // ignore
+          }
+        }
 
         let s1: Competitor | null = null;
         let s2: Competitor | null = null;
         let s3: Competitor | null = null;
         let initialLock = false;
 
-        if (dbRoster) {
-          s1 = athleteList.find((a) => a.id === dbRoster.star_1_id) || null;
-          s2 = athleteList.find((a) => a.id === dbRoster.star_2_id) || null;
-          s3 = athleteList.find((a) => a.id === dbRoster.star_3_id) || null;
-          initialLock = Boolean(dbRoster.is_locked || dbRoster.device_id === 'LOCKED');
-        } else {
-          try {
-            const saved =
-              localStorage.getItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`) ||
-              localStorage.getItem(`pixel_pros_roster_${cleanRoom}`);
-            if (saved) {
-              const ids: string[] = JSON.parse(saved);
-              if (Array.isArray(ids)) {
-                s1 = athleteList.find((a) => a.id === ids[0] || a.shortName.toLowerCase() === ids[0]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[0]?.toLowerCase())) || null;
-                s2 = athleteList.find((a) => a.id === ids[1] || a.shortName.toLowerCase() === ids[1]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[1]?.toLowerCase())) || null;
-                s3 = athleteList.find((a) => a.id === ids[2] || a.shortName.toLowerCase() === ids[2]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[2]?.toLowerCase())) || null;
+        if (cleanName) {
+          const dbRoster = validRosters.find(
+            (r) => (r.room_code || '').toUpperCase() === cleanRoom && r.user_name.toUpperCase() === cleanName
+          );
+
+          if (dbRoster) {
+            s1 = athleteList.find((a) => a.id === dbRoster.star_1_id) || null;
+            s2 = athleteList.find((a) => a.id === dbRoster.star_2_id) || null;
+            s3 = athleteList.find((a) => a.id === dbRoster.star_3_id) || null;
+            initialLock = Boolean(dbRoster.is_locked || dbRoster.device_id === 'LOCKED');
+          } else {
+            try {
+              const saved =
+                localStorage.getItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`) ||
+                localStorage.getItem(`pixel_pros_roster_${cleanRoom}`);
+              if (saved) {
+                const ids: string[] = JSON.parse(saved);
+                if (Array.isArray(ids)) {
+                  s1 = athleteList.find((a) => a.id === ids[0] || a.shortName.toLowerCase() === ids[0]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[0]?.toLowerCase())) || null;
+                  s2 = athleteList.find((a) => a.id === ids[1] || a.shortName.toLowerCase() === ids[1]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[1]?.toLowerCase())) || null;
+                  s3 = athleteList.find((a) => a.id === ids[2] || a.shortName.toLowerCase() === ids[2]?.toLowerCase() || a.displayName.toLowerCase().includes(ids[2]?.toLowerCase())) || null;
+                }
               }
+              initialLock = getSquadLockState(cleanRoom, cleanName);
+            } catch {
+              // ignore
             }
-            initialLock = localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`) === 'true';
-          } catch {
-            // ignore
           }
         }
 
-        if (!s1 && !s2 && !s3 && cleanRoom === 'COUCH' && athleteList.length >= 3) {
-          s1 = athleteList.find((a) => a.displayName.toLowerCase().includes('josh allen')) || athleteList[0] || null;
-          s2 = athleteList.find((a) => a.displayName.toLowerCase().includes('derrick henry')) || athleteList[1] || null;
-          s3 = athleteList.find((a) => a.displayName.toLowerCase().includes('ceedee lamb')) || athleteList.find((a) => a.displayName.toLowerCase().includes('mahomes')) || athleteList[2] || null;
-        }
-
         const filledCount = [s1, s2, s3].filter(Boolean).length;
+        const finalLock = cleanName ? (filledCount === 3 && initialLock) : false;
         setSquadSlots({ star1: s1, star2: s2, star3: s3 });
-        setIsLocked(filledCount === 3 && initialLock);
+        setIsLocked(finalLock);
+        if (cleanName) {
+          setSquadLockState(cleanRoom, cleanName, finalLock);
+        }
       } catch (err) {
         console.warn('⚡ Room sync error:', err);
       }
@@ -583,7 +760,19 @@ export default function App() {
   const userTotalPoints = filledStars.reduce((sum, p) => sum + (p?.score || 0), 0);
 
   const normalizedRoom = (roomCode || 'COUCH').trim().toUpperCase();
-  const normalizedActiveUser = (userName || 'DAD').trim().toUpperCase();
+  const normalizedActiveUser = (userName || '').trim().toUpperCase();
+
+  const selectedPlayerIdsArray = [
+    squadSlots.star1?.id || '',
+    squadSlots.star2?.id || '',
+    squadSlots.star3?.id || '',
+  ].filter(Boolean);
+
+  // STRICT GUARD: A squad with < 3 stars CAN NEVER BE LOCKED, nor can an empty squad
+  const isCurrentSquadLocked =
+    Boolean(normalizedActiveUser) &&
+    selectedPlayerIdsArray.length === 3 &&
+    Boolean(isLocked || getSquadLockState(normalizedRoom, normalizedActiveUser));
 
   // Dynamic Family Squads list in this room for the switcher
   const squadPillsData = roomRosters
@@ -594,18 +783,24 @@ export default function App() {
       const s3 = roster.find((p) => p.id === r.star_3_id);
       const stars = [s1, s2, s3].filter(Boolean) as Competitor[];
       const totalScore = stars.reduce((sum, p) => sum + (p.score || 0), 0);
+      const isCurrent = normalizedActiveUser && r.user_name.toUpperCase() === normalizedActiveUser;
+      // Guard condition: only lock if exactly 3 stars are picked
+      const squadLocked = isCurrent
+        ? isCurrentSquadLocked
+        : stars.length === 3 && Boolean(r.is_locked || r.device_id === 'LOCKED' || getSquadLockState(normalizedRoom, r.user_name));
+
       return {
         userName: r.user_name.toUpperCase(),
-        isLocked: Boolean(r.is_locked || r.device_id === 'LOCKED'),
+        isLocked: squadLocked,
         starCount: stars.length,
         totalScore,
       };
     });
 
-  if (!squadPillsData.some((s) => s.userName === normalizedActiveUser)) {
+  if (normalizedActiveUser && !squadPillsData.some((s) => s.userName === normalizedActiveUser)) {
     squadPillsData.unshift({
       userName: normalizedActiveUser,
-      isLocked,
+      isLocked: isCurrentSquadLocked,
       starCount: filledStars.length,
       totalScore: userTotalPoints,
     });
@@ -620,14 +815,8 @@ export default function App() {
       squadSlots.star2?.id || '',
       squadSlots.star3?.id || '',
     ],
-    isLocked,
+    isLocked: isCurrentSquadLocked,
   };
-
-  const selectedPlayerIdsArray = [
-    squadSlots.star1?.id || '',
-    squadSlots.star2?.id || '',
-    squadSlots.star3?.id || '',
-  ].filter(Boolean);
 
   return (
     <ErrorBoundary>
@@ -717,6 +906,9 @@ export default function App() {
           onSelectSquad={handleSelectSquad}
           onCreateSquad={handleCreateSquad}
           onDeleteSquad={handleDeleteSquad}
+          isAddDrawerOpen={isAddSquadDrawerOpen}
+          onOpenAddDrawer={() => setIsAddSquadDrawerOpen(true)}
+          onCloseAddDrawer={() => setIsAddSquadDrawerOpen(false)}
           onOpenRoomModal={() => {
             setTempRoomCode(roomCode);
             setIsRoomModalOpen(true);
@@ -756,7 +948,7 @@ export default function App() {
                 slots={squadSlots}
                 userName={userName}
                 roomCode={roomCode}
-                isLocked={isLocked}
+                isLocked={isCurrentSquadLocked}
                 matches={matches}
                 onCommitUserName={handleCommitUserName}
                 onCommitRoomCode={handleCommitRoomCode}
@@ -765,6 +957,7 @@ export default function App() {
                 onToggleLock={handleToggleLock}
                 onLockedSlotAttempt={() => showToast('🔒 Lineup is LOCKED! Tap UNLOCK PICKS to make changes.')}
                 onInspectPlayer={(player) => setDetailedPlayer(player)}
+                onRequestCreateSquad={() => setIsAddSquadDrawerOpen(true)}
               />
             )}
 
@@ -962,21 +1155,32 @@ export default function App() {
                   autoFocus
                 />
 
-                {/* Quick Room Suggestions */}
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  {['COUCH', 'CUSE001', 'SUPERBOWL'].map((r) => (
-                    <button
+                {/* Quick Room Suggestions / History with [×] removal */}
+                <div className="flex items-center justify-center flex-wrap gap-1.5 mb-3">
+                  {recentRooms.map((r) => (
+                    <div
                       key={r}
-                      type="button"
                       onClick={() => setTempRoomCode(r)}
-                      className={`px-2 py-0.5 border font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5 ${
+                      className={`group flex items-center gap-1.5 px-2 py-1 border font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5 transition-all select-none ${
                         tempRoomCode === r
                           ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52]'
                           : 'bg-[#ebd2a4] hover:bg-[#fae5b8] text-[#5c3509] border-[#c99a57]'
                       }`}
                     >
-                      {r}
-                    </button>
+                      <span>{r}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleRemoveRecentRoom(r, e)}
+                        className={`w-3.5 h-3.5 flex items-center justify-center text-[10px] font-bold rounded-2xs transition-colors cursor-pointer shrink-0 ${
+                          tempRoomCode === r
+                            ? 'text-[#fae5b8]/70 hover:text-white hover:bg-[#0a2d52]'
+                            : 'text-[#784610]/70 hover:text-[#b91c1c] hover:bg-[#d4a86a]'
+                        }`}
+                        title={`Remove ${r} from history`}
+                      >
+                        ×
+                      </button>
+                    </div>
                   ))}
                 </div>
 
@@ -993,6 +1197,18 @@ export default function App() {
                     className="touch-manipulation px-3 py-2 bg-[#784610] hover:bg-[#92400e] text-[#fae5b8] border-2 border-[#451a03] font-pixel text-xs font-bold rounded-xs cursor-pointer active:translate-y-0.5"
                   >
                     CANCEL
+                  </button>
+                </div>
+
+                {/* Subtle Retro Red Button: [ 🗑️ RESET ROOM DATA ] */}
+                <div className="mt-3.5 pt-2.5 border-t-2 border-[#d4a86a]/60 text-center">
+                  <button
+                    type="button"
+                    onClick={handleResetCurrentRoom}
+                    className="touch-manipulation text-[#991b1b] hover:text-[#dc2626] font-pixel text-[10px] sm:text-[11px] underline cursor-pointer active:translate-y-0.5 transition-colors inline-flex items-center justify-center gap-1.5"
+                  >
+                    <span>🗑️</span>
+                    <span>RESET ROOM DATA</span>
                   </button>
                 </div>
               </form>

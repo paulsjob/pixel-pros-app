@@ -18,6 +18,7 @@ interface MyTeamViewProps {
   onToggleLock?: () => void;
   onLockedSlotAttempt?: () => void;
   onInspectPlayer?: (player: Competitor) => void;
+  onRequestCreateSquad?: () => void;
 }
 
 const SLOT_CONFIG: { key: ActiveSlot; label: string }[] = [
@@ -37,10 +38,15 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
   onToggleLock,
   onLockedSlotAttempt,
   onInspectPlayer,
+  onRequestCreateSquad,
 }) => {
+  const isEmptySquadState = !userName || !userName.trim();
+
   // Count how many stars are set
   const filledSlots = [slots.star1, slots.star2, slots.star3].filter(Boolean) as Competitor[];
   const filledCount = filledSlots.length;
+  // Strict guard condition: A squad with < 3 stars CAN NEVER BE LOCKED
+  const effectiveIsLocked = !isEmptySquadState && filledCount === 3 && Boolean(isLocked);
 
   return (
     <div className="w-full box-border">
@@ -52,77 +58,82 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
         <div className="flex items-center justify-between border-b-2 border-[#d4a86a] pb-2 mb-3 sm:mb-4">
           <h2 className="font-pixel text-xs sm:text-base text-[#5c3509] tracking-wider uppercase flex items-center gap-2">
             <Sparkles size={16} className="text-[#b45309]" />
-            <span>YOUR 3 NFL STARS</span>
+            <span>{userName ? `${userName.toUpperCase()}'S 3 NFL STARS` : 'YOUR 3 NFL STARS'}</span>
           </h2>
           <span className="font-pixel text-[11px] sm:text-xs text-[#fae5b8] bg-[#12579b] px-2.5 py-1 border border-[#0a2d52] rounded-xs shrink-0 whitespace-nowrap font-bold">
-            {filledCount}/3 SET
+            {isEmptySquadState ? 'NO SQUAD' : `${filledCount}/3 SET`}
           </span>
         </div>
 
-        {/* 3 Prominent Star Podiums with generous breathing room */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 w-full">
-          {SLOT_CONFIG.map(({ key, label }) => {
-            const player = slots[key];
-            const { firstName, lastName } = player
-              ? splitPlayerFirstLastName(player.displayName)
-              : { firstName: '', lastName: '' };
+        {/* 3 Prominent Star Podiums with generous breathing room & Empty State Overlay */}
+        <div className="relative">
+          <div className={`grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6 w-full transition-opacity duration-200 ${isEmptySquadState ? 'opacity-25 pointer-events-none select-none' : ''}`}>
+            {SLOT_CONFIG.map(({ key, label }) => {
+              const player = slots[key];
+              const { firstName, lastName } = player
+                ? splitPlayerFirstLastName(player.displayName)
+                : { firstName: '', lastName: '' };
 
-            const playerTeam = (player?.teamCode || '').trim().toUpperCase();
-            const playerMatch = player
-              ? (matches || []).find((m) => {
-                  const h = (m.homeTeamCode || m.home_team || '').trim().toUpperCase();
-                  const a = (m.awayTeamCode || m.away_team || '').trim().toUpperCase();
-                  return h === playerTeam || a === playerTeam;
-                })
-              : null;
+              const playerTeam = (player?.teamCode || '').trim().toUpperCase();
+              const playerMatch = player
+                ? (matches || []).find((m) => {
+                    const h = (m.homeTeamCode || m.home_team || '').trim().toUpperCase();
+                    const a = (m.awayTeamCode || m.away_team || '').trim().toUpperCase();
+                    return h === playerTeam || a === playerTeam;
+                  })
+                : null;
 
-            const gameSituation = playerMatch ? formatRealtimeGameSituationCompact(playerMatch) : null;
+              const gameSituation = playerMatch ? formatRealtimeGameSituationCompact(playerMatch) : null;
 
-            const passYds = Number(
-              player?.stats?.pass_yds ??
-              player?.stats?.passing_yards ??
-              player?.stats?.passingYards ??
-              0
-            );
-            const rushYds = Number(
-              player?.stats?.rush_yds ??
-              player?.stats?.rushing_yards ??
-              player?.stats?.rushingYards ??
-              0
-            );
-            const recYds = Number(
-              player?.stats?.rec_yds ??
-              player?.stats?.receiving_yards ??
-              player?.stats?.receivingYards ??
-              0
-            );
-            const totalYds = passYds + rushYds + recYds;
-            const tds = Number(
-              player?.stats?.tds ??
-              player?.stats?.touchdowns ??
-              0
-            );
+              const passYds = Number(
+                player?.stats?.pass_yds ??
+                player?.stats?.passing_yards ??
+                player?.stats?.passingYards ??
+                0
+              );
+              const rushYds = Number(
+                player?.stats?.rush_yds ??
+                player?.stats?.rushing_yards ??
+                player?.stats?.rushingYards ??
+                0
+              );
+              const recYds = Number(
+                player?.stats?.rec_yds ??
+                player?.stats?.receiving_yards ??
+                player?.stats?.receivingYards ??
+                0
+              );
+              const totalYds = passYds + rushYds + recYds;
+              const tds = Number(
+                player?.stats?.tds ??
+                player?.stats?.touchdowns ??
+                0
+              );
 
-            return (
-              <div
-                key={key}
-                onClick={() => {
-                  if (player) {
-                    onInspectPlayer?.(player);
-                  } else {
-                    if (isLocked) {
-                      if (onLockedSlotAttempt) onLockedSlotAttempt();
+              return (
+                <div
+                  key={key}
+                  onClick={() => {
+                    if (isEmptySquadState) {
+                      onRequestCreateSquad?.();
                       return;
                     }
-                    onSelectSlot(key);
-                  }
-                }}
-                className={`touch-manipulation rounded-xs transition-all box-border min-h-0 md:min-h-[310px] flex flex-col justify-between p-2.5 sm:p-3.5 md:p-4 ${
-                  isLocked && !player
-                    ? 'bg-[#e4cb9c] border-3 border-[#94713a] cursor-not-allowed shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]'
-                    : 'bg-[#ebd2a4] border-3 border-[#c99a57] cursor-pointer hover:bg-[#fae9c8] group shadow-[0_4px_0_0_#a77b3b] active:translate-y-0.5'
-                }`}
-              >
+                    if (player) {
+                      onInspectPlayer?.(player);
+                    } else {
+                      if (effectiveIsLocked) {
+                        if (onLockedSlotAttempt) onLockedSlotAttempt();
+                        return;
+                      }
+                      onSelectSlot(key);
+                    }
+                  }}
+                  className={`touch-manipulation rounded-xs transition-all box-border min-h-0 md:min-h-[310px] flex flex-col justify-between p-2.5 sm:p-3.5 md:p-4 ${
+                    effectiveIsLocked && !player
+                      ? 'bg-[#e4cb9c] border-3 border-[#94713a] cursor-not-allowed shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)]'
+                      : 'bg-[#ebd2a4] border-3 border-[#c99a57] cursor-pointer hover:bg-[#fae9c8] group shadow-[0_4px_0_0_#a77b3b] active:translate-y-0.5'
+                  }`}
+                >
                 {/* Star Slot Badge Header */}
                 <div className="w-full flex items-center justify-between mb-1.5 md:mb-2">
                   <span className="px-2 py-0.5 md:px-2.5 md:py-1 bg-[#12579b] text-[#fae5b8] font-pixel text-[9px] md:text-xs border border-[#0a2d52] rounded-xs shadow-xs font-bold tracking-wider whitespace-nowrap">
@@ -130,7 +141,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
                   </span>
 
                   {/* [X] Reset button: strictly resets this specific slot to null */}
-                  {player && !isLocked && (
+                  {player && !effectiveIsLocked && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -314,9 +325,48 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
           })}
         </div>
 
-        {/* Arcade Lock / Unlock Action Bar (Grounded Full-Width Control Deck Spanning Cards) */}
+        {/* Clean, High-Impact "Player 1 Insert Coin" Zero-State Arcade Card */}
+        {isEmptySquadState && (
+          <div
+            onClick={onRequestCreateSquad}
+            className="absolute inset-0 bg-[#080d1a]/85 backdrop-blur-[2px] rounded-xs flex flex-col items-center justify-center p-5 sm:p-8 cursor-pointer group z-10 transition-all border-3 border-[#16a34a] shadow-[0_0_25px_rgba(22,163,74,0.35)]"
+          >
+            {/* Arcade Icon Bubble */}
+            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#15233d] border-3 border-[#38bdf8] flex items-center justify-center text-2xl sm:text-3xl mb-3 shadow-[0_4px_0_0_#0a0f1d] group-hover:scale-110 transition-transform">
+              🎮
+            </div>
+
+            {/* Heading */}
+            <h3 className="font-pixel text-base sm:text-xl text-[#fde047] text-center font-bold tracking-wider mb-1.5 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+              READY FOR KICKOFF?
+            </h3>
+
+            {/* Subtitle */}
+            <p className="font-retro text-xs sm:text-sm text-[#93c5fd] text-center max-w-sm mb-4 sm:mb-5 font-bold">
+              Create your squad to draft your 3 NFL stars!
+            </p>
+
+            {/* Single Primary CTA Button (Pulsing Arcade Green) */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRequestCreateSquad?.();
+              }}
+              className="touch-manipulation py-2.5 sm:py-3 px-5 sm:px-7 bg-[#16a34a] hover:bg-[#22c55e] text-white border-3 border-[#14532d] shadow-[0_4px_0_0_#052e16] rounded-xs font-pixel text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer font-bold select-none active:translate-y-0.5 animate-pulse transition-transform group-hover:scale-105"
+            >
+              <span className="text-[#fde047]">⚡</span>
+              <span>CREATE FIRST SQUAD</span>
+              <span className="text-[#fde047]">⚡</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Arcade Lock / Unlock Action Bar (Rendered ONLY when a squad exists) */}
+      {!isEmptySquadState && (
         <div className="mt-3 sm:mt-4 w-full box-border">
-          {filledCount === 3 && isLocked ? (
+          {filledCount === 3 && effectiveIsLocked ? (
             /* STATE A: LOCKED (All 3 Stars Picked & Confirmed) */
             <div className="w-full px-3 sm:px-5 py-2 sm:py-3 bg-[#064e3b] text-[#fae5b8] border-3 border-[#047857] shadow-[0_4px_0_0_#022c22] rounded-xs flex items-center justify-between gap-2 sm:gap-4 box-border">
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
@@ -365,6 +415,7 @@ export const MyTeamView: React.FC<MyTeamViewProps> = ({
             </button>
           )}
         </div>
+      )}
 
       </div>
 

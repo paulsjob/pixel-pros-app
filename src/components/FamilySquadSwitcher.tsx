@@ -14,6 +14,9 @@ interface FamilySquadSwitcherProps {
   onCreateSquad: (squadName: string) => void;
   onDeleteSquad?: (squadName: string) => void;
   onOpenRoomModal?: () => void;
+  isAddDrawerOpen?: boolean;
+  onOpenAddDrawer?: () => void;
+  onCloseAddDrawer?: () => void;
 }
 
 export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
@@ -24,16 +27,21 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
   onCreateSquad,
   onDeleteSquad,
   onOpenRoomModal,
+  isAddDrawerOpen,
+  onOpenAddDrawer,
+  onCloseAddDrawer,
 }) => {
-  const [isAdding, setIsAdding] = useState(false);
+  const [internalIsAdding, setInternalIsAdding] = useState(false);
+  const isAdding = isAddDrawerOpen !== undefined ? isAddDrawerOpen : internalIsAdding;
+
   const [newSquadName, setNewSquadName] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [squadToDrop, setSquadToDrop] = useState<string | null>(null);
 
-  // Normalize active user name for clean comparison
-  const normalizedActive = (activeUserName || 'DAD').trim().toUpperCase();
+  // Normalize active user name for clean comparison (DO NOT default to 'DAD'!)
+  const normalizedActive = (activeUserName || '').trim().toUpperCase();
 
-  // Ensure current active user is included in the list of squads if not already present
+  // Ensure current active user is included in the list of squads ONLY if non-empty
   const squadMap = new Map<string, { userName: string; isLocked?: boolean; starCount?: number; totalScore?: number }>();
   squads.forEach((s) => {
     const key = (s.userName || '').trim().toUpperCase();
@@ -52,13 +60,15 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
   const maxScore = Math.max(0, ...squadList.map((s) => s.totalScore ?? 0));
 
   const handleStartAdd = () => {
-    setIsAdding(true);
+    if (onOpenAddDrawer) onOpenAddDrawer();
+    setInternalIsAdding(true);
     setNewSquadName('');
     setErrorMsg(null);
   };
 
   const handleCancelAdd = () => {
-    setIsAdding(false);
+    if (onCloseAddDrawer) onCloseAddDrawer();
+    setInternalIsAdding(false);
     setNewSquadName('');
     setErrorMsg(null);
   };
@@ -77,13 +87,15 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
     if (squadMap.has(clean)) {
       // If squad already exists, simply switch to it!
       onSelectSquad(clean);
-      setIsAdding(false);
+      if (onCloseAddDrawer) onCloseAddDrawer();
+      setInternalIsAdding(false);
       setNewSquadName('');
       return;
     }
 
     onCreateSquad(clean);
-    setIsAdding(false);
+    if (onCloseAddDrawer) onCloseAddDrawer();
+    setInternalIsAdding(false);
     setNewSquadName('');
     setErrorMsg(null);
   };
@@ -119,7 +131,16 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
           </div>
 
         {/* Squad Pills List & [+ ADD] Action - Smooth Horizontal Scroll */}
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar touch-pan-x">
+        <div
+          onClick={() => {
+            if (squadList.length === 0) {
+              handleStartAdd();
+            }
+          }}
+          className={`flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar touch-pan-x ${
+            squadList.length === 0 ? 'cursor-pointer' : ''
+          }`}
+        >
           {squadList.map((squad) => {
             const isActive = squad.userName === normalizedActive;
             const isLeader = maxScore > 0 && (squad.totalScore ?? 0) === maxScore;
@@ -191,16 +212,20 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
             );
           })}
 
-          {/* [+ ADD] Button to quickly register another child/companion squad */}
+          {/* [+ ADD SQUAD] / [+ ADD] Button */}
           {!isAdding && (
             <button
               type="button"
               onClick={handleStartAdd}
-              className="touch-manipulation shrink-0 flex items-center gap-1 px-2 py-1 font-pixel text-[10px] sm:text-xs rounded-xs border-2 border-dashed border-[#16a34a] bg-[#14532d]/40 text-[#4ade80] hover:bg-[#16a34a] hover:text-white transition-all cursor-pointer select-none whitespace-nowrap active:translate-y-0.5 shadow-xs font-bold"
-              title="Add another family squad to this room"
+              className={`touch-manipulation shrink-0 flex items-center gap-1.5 font-pixel rounded-xs border-2 border-dashed border-[#16a34a] bg-[#14532d]/40 text-[#4ade80] hover:bg-[#16a34a] hover:text-white transition-all cursor-pointer select-none whitespace-nowrap active:translate-y-0.5 shadow-xs font-bold ${
+                squadList.length === 0
+                  ? 'px-3 py-1 text-xs animate-pulse bg-[#14532d]/70 text-[#86efac]'
+                  : 'px-2 py-1 text-[10px] sm:text-xs'
+              }`}
+              title="Add family squad to this room"
             >
               <Plus size={12} />
-              <span>+ ADD</span>
+              <span>{squadList.length === 0 ? '+ ADD SQUAD' : '+ ADD'}</span>
             </button>
           )}
         </div>
@@ -275,8 +300,8 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
                     type="submit"
                     className="touch-manipulation py-2 bg-[#16a34a] hover:bg-[#22c55e] text-white border border-[#14532d] font-pixel text-xs rounded-xs cursor-pointer shadow-sm active:translate-y-0.5 font-bold flex items-center justify-center gap-1.5 text-center whitespace-nowrap"
                   >
-                    <Check size={14} />
-                    <span>✓ CREATE</span>
+                    <Check size={14} strokeWidth={3} />
+                    <span>CREATE SQUAD</span>
                   </button>
                 </div>
               </form>
@@ -292,22 +317,22 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
         </>
       )}
 
-      {/* Drop Squad Confirmation Modal */}
+      {/* Delete Squad Confirmation Modal */}
       {squadToDrop && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-2xs">
-          <div className="pixel-box-cream p-4 max-w-xs w-full border-4 border-[#1a2238] shadow-[0_6px_0_0_#0a0f1d] rounded-xs text-center">
-            <div className="font-pixel text-xs sm:text-sm text-[#991b1b] mb-2 font-bold flex items-center justify-center gap-1.5">
-              <span>⚠️</span>
-              <span>DROP SQUAD?</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xs">
+          <div className="pixel-box-cream p-4 sm:p-5 max-w-sm w-full border-4 border-[#1a2238] shadow-[0_6px_0_0_#0a0f1d] rounded-xs text-center">
+            <div className="font-pixel text-xs sm:text-sm text-[#991b1b] mb-2 font-bold flex items-center justify-center gap-2">
+              <span className="text-base">⚠️</span>
+              <span>DELETE SQUAD?</span>
             </div>
-            <p className="font-retro text-xs text-[#5c3509] mb-4">
-              Drop squad <strong className="font-pixel text-[#12579b]">{squadToDrop}</strong> from room <strong className="font-pixel text-[#f59e0b]">{roomCode}</strong>?
+            <p className="font-retro text-xs sm:text-sm text-[#5c3509] mb-4 leading-relaxed">
+              Remove <strong className="font-pixel text-[#12579b]">{squadToDrop}</strong> from room <strong className="font-pixel text-[#f59e0b]">{roomCode}</strong>? All picks will be lost.
             </p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={() => setSquadToDrop(null)}
-                className="touch-manipulation py-1.5 bg-[#475569] hover:bg-[#64748b] text-white font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5"
+                className="touch-manipulation py-2 px-3 bg-[#475569] hover:bg-[#64748b] text-white font-pixel text-[11px] rounded-xs cursor-pointer active:translate-y-0.5 font-bold"
               >
                 CANCEL
               </button>
@@ -318,9 +343,10 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
                   setSquadToDrop(null);
                   onDeleteSquad?.(target);
                 }}
-                className="touch-manipulation py-1.5 bg-[#dc2626] hover:bg-[#ef4444] text-white font-pixel text-[10px] rounded-2xs cursor-pointer font-bold active:translate-y-0.5"
+                className="touch-manipulation py-2 px-3 bg-[#dc2626] hover:bg-[#b91c1c] text-white font-pixel text-[11px] rounded-xs cursor-pointer font-bold active:translate-y-0.5 border border-[#7f1d1d] shadow-xs flex items-center justify-center gap-1.5 whitespace-nowrap"
               >
-                DROP SQUAD
+                <span>🗑️</span>
+                <span>DELETE SQUAD</span>
               </button>
             </div>
           </div>

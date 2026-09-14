@@ -52,41 +52,13 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   const safeNflPlayers = Array.isArray(nflCompetitors) ? nflCompetitors : [];
   const safeRoomRosters = Array.isArray(roomRosters) ? roomRosters : [];
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
-  const activeNormalizedName = (userName || 'DAD').trim().toUpperCase();
+  const activeNormalizedName = (userName || '').trim().toUpperCase();
 
   // Top 20 NFL Competitors ordered by score DESC
   const top20Players = safeNflPlayers
     .slice()
     .sort((a, b) => (b.score || 0) - (a.score || 0))
     .slice(0, 20);
-
-  // Fallback couch companions ONLY for default 'COUCH' room if no saved room rosters exist
-  const defaultCouchLineups: UserRoster[] = [
-    {
-      room_code: 'COUCH',
-      user_name: 'DAD',
-      star_1_id: safeNflPlayers[1]?.id || 'mahomes',
-      star_2_id: safeNflPlayers[4]?.id || 'henry',
-      star_3_id: safeNflPlayers[7]?.id || 'brown',
-      updated_at: new Date().toISOString(),
-    },
-    {
-      room_code: 'COUCH',
-      user_name: 'MOM',
-      star_1_id: safeNflPlayers[0]?.id || 'allen',
-      star_2_id: safeNflPlayers[3]?.id || 'lamb',
-      star_3_id: safeNflPlayers[8]?.id || 'jefferson',
-      updated_at: new Date().toISOString(),
-    },
-    {
-      room_code: 'COUCH',
-      user_name: 'BROTHER',
-      star_1_id: safeNflPlayers[2]?.id || 'jackson',
-      star_2_id: safeNflPlayers[5]?.id || 'barkley',
-      star_3_id: safeNflPlayers[9]?.id || 'chase',
-      updated_at: new Date().toISOString(),
-    },
-  ];
 
   // Current active user roster entry for this room
   const currentUserRoster: UserRoster = {
@@ -101,15 +73,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
   // Map to deduplicate strictly by user_name.toUpperCase() in this room
   const rosterMap = new Map<string, UserRoster>();
-  
-  // 1. If standard COUCH room and no saved room rosters, seed companions
-  if (cleanRoom === 'COUCH' && safeRoomRosters.filter((r) => (r.room_code || '').toUpperCase() === 'COUCH').length === 0) {
-    defaultCouchLineups.forEach((r) => {
-      rosterMap.set(r.user_name.toUpperCase(), r);
-    });
-  }
 
-  // 2. Add synced room rosters strictly belonging to this room_code (ignoring ghost users)
+  // 1. Add synced room rosters strictly belonging to this room_code (ignoring ghost users)
   safeRoomRosters.forEach((r) => {
     if (isGhostUser(r.user_name)) return;
     if ((r.room_code || '').toUpperCase() === cleanRoom) {
@@ -120,8 +85,10 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     }
   });
 
-  // 3. Always enforce currently active squad's live picks
-  rosterMap.set(activeNormalizedName, currentUserRoster);
+  // 2. Always enforce currently active squad's live picks if active user exists
+  if (activeNormalizedName) {
+    rosterMap.set(activeNormalizedName, currentUserRoster);
+  }
 
   const familyListWithDynamicTotals = Array.from(rosterMap.values())
     .filter((entry) => !isGhostUser(entry.user_name))
@@ -226,7 +193,14 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         <div className="space-y-2 w-full">
           {activeTier === 'family' ? (
             /* TIER 1: FAMILY RANKING (Dynamic sum of chosen 3 Stars) */
-            familyListWithDynamicTotals.map((entry, index) => {
+            familyListWithDynamicTotals.length === 0 ? (
+              <div className="p-6 sm:p-8 text-center border-2 border-dashed border-[#c99a57] rounded-xs bg-[#fae9c8]/50 flex flex-col items-center justify-center">
+                <span className="text-2xl mb-2">🏈</span>
+                <p className="font-pixel text-xs sm:text-sm text-[#5c3509] mb-1">NO SQUADS IN ROOM "{cleanRoom}" YET</p>
+                <p className="font-retro text-xs text-[#784610]">Create your first squad to start the household competition!</p>
+              </div>
+            ) : (
+              familyListWithDynamicTotals.map((entry, index) => {
               const displayRank = index + 1;
               const isUser = entry.isYou;
 
@@ -337,8 +311,9 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 </div>
               );
             })
-          ) : (
-            /* TIER 2: TOP SCORES (Top 20 Real NFL Athletes from competitors table) */
+          )
+        ) : (
+          /* TIER 2: TOP SCORES (Top 20 Real NFL Athletes from competitors table) */
             top20Players.map((player, index) => {
               const displayRank = index + 1;
               const { firstName, lastName } = splitPlayerFirstLastName(player.displayName);

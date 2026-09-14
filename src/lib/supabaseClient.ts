@@ -285,6 +285,30 @@ export function isGhostUser(name?: string | null): boolean {
   return GHOST_USER_NAMES.includes(name.trim().toUpperCase());
 }
 
+export function getSquadLockState(roomCode: string, userName: string): boolean {
+  const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+  const cleanName = (userName || 'DAD').trim().toUpperCase();
+  try {
+    return (
+      localStorage.getItem(`pixel_locked_${cleanRoom}_${cleanName}`) === 'true' ||
+      localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`) === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function setSquadLockState(roomCode: string, userName: string, locked: boolean): void {
+  const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+  const cleanName = (userName || 'DAD').trim().toUpperCase();
+  try {
+    localStorage.setItem(`pixel_locked_${cleanRoom}_${cleanName}`, String(locked));
+    localStorage.setItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`, String(locked));
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Queries user_rosters where room_code = currentRoomCode (strict uppercase).
  * Strict database identity is (room_code, user_name).
@@ -331,15 +355,22 @@ export async function fetchRoomRosters(roomCode: string): Promise<UserRoster[]> 
       const key = (r.user_name || '').trim().toUpperCase();
       if (!key) return;
 
-      const isLocked =
+      const starCount = [r.star_1_id, r.star_2_id, r.star_3_id].filter(
+        (id) => id && typeof id === 'string' && id.trim() !== ''
+      ).length;
+
+      const rawLocked =
         r.device_id === 'LOCKED' ||
-        localStorage.getItem(`pixel_pros_picks_locked_${cleanRoom}_${key}`) === 'true';
+        getSquadLockState(cleanRoom, key);
+
+      // STRICT GUARD: A squad with < 3 stars CAN NEVER BE LOCKED
+      const isLocked = starCount === 3 && rawLocked;
 
       const entry: UserRoster = {
         id: r.id,
         room_code: (r.room_code || '').toUpperCase(),
         user_name: key,
-        device_id: r.device_id,
+        device_id: isLocked ? 'LOCKED' : 'UNLOCKED',
         star_1_id: r.star_1_id || '',
         star_2_id: r.star_2_id || '',
         star_3_id: r.star_3_id || '',
@@ -374,6 +405,7 @@ export async function deleteUserRoster(roomCode: string, userName: string): Prom
     }
     localStorage.removeItem(`pixel_pros_roster_${cleanRoom}_${cleanName}`);
     localStorage.removeItem(`pixel_pros_picks_locked_${cleanRoom}_${cleanName}`);
+    localStorage.removeItem(`pixel_locked_${cleanRoom}_${cleanName}`);
 
     // 2. Delete from Supabase
     await supabase
@@ -386,6 +418,43 @@ export async function deleteUserRoster(roomCode: string, userName: string): Prom
     return true;
   } catch (err) {
     console.warn('deleteUserRoster error:', err);
+    return false;
+  }
+}
+
+/**
+ * Resets an entire room by deleting all squads/user_rosters from Supabase and local cache.
+ */
+export async function resetRoomRosters(roomCode: string): Promise<boolean> {
+  const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
+  if (!cleanRoom) return false;
+
+  try {
+    // 1. Remove all room records from localStorage
+    try {
+      localStorage.removeItem(`pixel_pros_rosters_${cleanRoom}`);
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.includes(`_${cleanRoom}_`) || k.endsWith(`_${cleanRoom}`))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // ignore
+    }
+
+    // 2. Delete all records for room_code from Supabase
+    await supabase
+      .from('user_rosters')
+      .delete()
+      .eq('room_code', cleanRoom);
+
+    window.dispatchEvent(new CustomEvent('pixel_pros_roster_update', { detail: { room_code: cleanRoom, reset: true } }));
+    return true;
+  } catch (err) {
+    console.warn('resetRoomRosters error:', err);
     return false;
   }
 }
