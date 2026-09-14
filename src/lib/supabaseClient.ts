@@ -9,7 +9,6 @@ import {
   getNBATeamFullName,
 } from '../utils/nbaTeamData';
 
-// Ensure Supabase URL and Keys are populated from Vite defines or process.env
 const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : {};
 const procEnv = typeof process !== 'undefined' ? process.env : {};
 
@@ -26,7 +25,6 @@ export const SUPABASE_ANON_KEY =
   metaEnv?.VITE_SUPABASE_ANON_KEY ||
   '';
 
-// Supabase client instance with Realtime enabled
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   realtime: {
     params: {
@@ -45,9 +43,6 @@ function getSkinTone(name?: string): string {
   return SKIN_TONES[Math.abs(hash) % SKIN_TONES.length];
 }
 
-/**
- * Maps a single Supabase `competitors` database row directly to our frontend Competitor model.
- */
 export function mapRowToCompetitor(row: any): Competitor {
   const rowSport = String(row.sport || row.sport_id || 'nfl').toLowerCase();
   const rawId = String(row.id || '');
@@ -58,7 +53,7 @@ export function mapRowToCompetitor(row: any): Competitor {
 
   const statsObj = typeof row.stats === 'object' && row.stats !== null ? row.stats : {};
   const parts = rawName.split(/\s+/);
-  const shortName = (parts[parts.length - 1] || 'PRO').toUpperCase();
+  const shortName = (row.short_name || parts[parts.length - 1] || 'PRO').toUpperCase();
   const uniformNum = Number(row.uniform_number || row.jersey_number || getUniformNumber(rawName, rawId));
 
   if (rowSport === 'nba') {
@@ -164,9 +159,6 @@ export function mapRowToCompetitor(row: any): Competitor {
   };
 }
 
-/**
- * Fetches real active competitors from Supabase without referencing non-existent sport_id columns.
- */
 export async function fetchLiveCompetitors(sport: SportId = 'nfl'): Promise<Competitor[]> {
   try {
     const { data, error } = await supabase
@@ -175,7 +167,7 @@ export async function fetchLiveCompetitors(sport: SportId = 'nfl'): Promise<Comp
       .order('score', { ascending: false });
 
     if (error) {
-      console.warn(`⚡ Error fetching ${sport} competitors from Supabase:`, error.message);
+      console.warn(`Error fetching ${sport} competitors:`, error.message);
       return sport === 'nba' ? DEFAULT_NBA_COMPETITORS : [];
     }
 
@@ -183,7 +175,6 @@ export async function fetchLiveCompetitors(sport: SportId = 'nfl'): Promise<Comp
       return sport === 'nba' ? DEFAULT_NBA_COMPETITORS : [];
     }
 
-    // Filter in JS memory to prevent database schema mismatch crashes
     const filtered = data.filter((row: any) => {
       const rowSport = String(row.sport || row.sport_id || '').toLowerCase();
       if (sport === 'nba') {
@@ -198,27 +189,21 @@ export async function fetchLiveCompetitors(sport: SportId = 'nfl'): Promise<Comp
 
     return filtered.map(mapRowToCompetitor).sort((a, b) => b.score - a.score);
   } catch (err) {
-    console.warn(`⚡ Live Supabase ${sport} fetch encountered exception:`, err);
+    console.warn(`Exception during ${sport} competitors fetch:`, err);
     return sport === 'nba' ? DEFAULT_NBA_COMPETITORS : [];
   }
 }
 
-/**
- * Fetches real active NFL competitors directly from the Supabase competitors table.
- */
 export async function fetchLiveNFLCompetitors(): Promise<Competitor[]> {
   return fetchLiveCompetitors('nfl');
 }
 
-/**
- * Fetches real games directly from the Supabase matches table.
- */
 export async function fetchLiveMatches(sport: SportId = 'nfl'): Promise<Match[]> {
   try {
     const { data, error } = await supabase.from('matches').select('*');
 
     if (error) {
-      console.warn(`⚡ Error fetching ${sport} matches from Supabase:`, error.message);
+      console.warn(`Error fetching ${sport} matches:`, error.message);
       return sport === 'nba' ? DEFAULT_NBA_MATCHES : [];
     }
 
@@ -226,7 +211,6 @@ export async function fetchLiveMatches(sport: SportId = 'nfl'): Promise<Match[]>
       return sport === 'nba' ? DEFAULT_NBA_MATCHES : [];
     }
 
-    // Filter in JS memory to prevent database schema mismatch crashes
     const filtered = data.filter((row: any) => {
       const rowSport = String(row.sport || row.sport_id || '').toLowerCase();
       if (sport === 'nba') {
@@ -285,14 +269,11 @@ export async function fetchLiveMatches(sport: SportId = 'nfl'): Promise<Match[]>
       };
     });
   } catch (err) {
-    console.warn(`⚡ Live Supabase ${sport} matches fetch encountered exception:`, err);
+    console.warn(`Exception during ${sport} matches fetch:`, err);
     return sport === 'nba' ? DEFAULT_NBA_MATCHES : [];
   }
 }
 
-/**
- * Fetches real NFL games directly from the Supabase matches table.
- */
 export async function fetchLiveNFLMatches(): Promise<Match[]> {
   return fetchLiveMatches('nfl');
 }
@@ -305,9 +286,6 @@ function sanitizeCompetitorId(id?: string | null): string | null {
   return trimmed;
 }
 
-/**
- * Upsert picks directly to Supabase table `user_rosters`.
- */
 export async function upsertUserRoster(
   roomCode: string,
   userName: string,
@@ -429,9 +407,6 @@ export function setSquadLockState(roomCode: string, userName: string, locked: bo
   }
 }
 
-/**
- * Queries user_rosters where room_code = currentRoomCode.
- */
 export async function fetchRoomRosters(roomCode: string, sport: SportId = 'nfl'): Promise<UserRoster[]> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
 
@@ -509,9 +484,6 @@ export async function fetchRoomRosters(roomCode: string, sport: SportId = 'nfl')
   }
 }
 
-/**
- * Deletes a squad/user_roster entry from Supabase and local cache.
- */
 export async function deleteUserRoster(roomCode: string, userName: string, sport: SportId = 'nfl'): Promise<boolean> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   const cleanName = (userName || '').trim().toUpperCase();
@@ -555,9 +527,6 @@ export async function deleteUserRoster(roomCode: string, userName: string, sport
   }
 }
 
-/**
- * Resets an entire room by deleting all squads/user_rosters from Supabase and local cache.
- */
 export async function resetRoomRosters(roomCode: string): Promise<boolean> {
   const cleanRoom = (roomCode || 'COUCH').trim().toUpperCase();
   if (!cleanRoom) return false;
@@ -586,9 +555,6 @@ export async function resetRoomRosters(roomCode: string): Promise<boolean> {
   }
 }
 
-/**
- * Subscribes to Realtime Postgres changes specifically for a room's user_rosters.
- */
 export function subscribeToRoomRosters(roomCode: string, onUpdate: () => void) {
   const clean = (roomCode || 'COUCH').trim().toUpperCase();
   const channel = supabase
@@ -611,9 +577,6 @@ export function subscribeToRoomRosters(roomCode: string, onUpdate: () => void) {
   };
 }
 
-/**
- * Subscribes to Realtime Postgres changes on competitors, matches, and user_rosters.
- */
 export function subscribeToRealtimeScores(
   onCompetitorUpdate: (payload: any) => void,
   onMatchUpdate?: (payload: any) => void,
@@ -663,7 +626,7 @@ export function subscribeToRealtimeScores(
 
   channel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
-      console.log('⚡ Supabase Realtime Wire Connected: competitors, matches, user_rosters');
+      console.log('Supabase Realtime Wire Connected: competitors, matches, user_rosters');
     }
   });
 

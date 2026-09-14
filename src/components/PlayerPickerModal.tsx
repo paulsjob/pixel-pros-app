@@ -23,7 +23,31 @@ const SLOT_TITLES: Record<ActiveSlot, string> = {
   star3: 'STAR 3',
 };
 
-const NBA_TEAM_CODES = ['BOS', 'DEN', 'DAL', 'SAS', 'MIL', 'OKC', 'GSW', 'LAL', 'PHX', 'NYK', 'MIA_NBA', 'PHI_NBA'];
+const TEAM_ALIAS_MAP: Record<string, string> = {
+  KAN: 'KC',
+  KANSASCITY: 'KC',
+  DENVER: 'DEN',
+  GNB: 'GB',
+  GREENBAY: 'GB',
+  NWE: 'NE',
+  NEWENGLAND: 'NE',
+  NOR: 'NO',
+  NEWORLEANS: 'NO',
+  SFO: 'SF',
+  SANFRANCISCO: 'SF',
+  TAM: 'TB',
+  TAMPABAY: 'TB',
+  WAS: 'WSH',
+  WASHINGTON: 'WSH',
+  LVR: 'LV',
+  LASVEGAS: 'LV',
+};
+
+function normalizeCode(code?: string): string {
+  if (!code) return '';
+  const clean = code.trim().toUpperCase().replace(/\s+/g, '');
+  return TEAM_ALIAS_MAP[clean] || clean;
+}
 
 export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
   isOpen,
@@ -44,12 +68,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
     if (!Array.isArray(matches)) return [];
     return matches.filter((m) => {
       const matchSport = (m.sportId || (m as any).sport || '').toLowerCase();
-      if (matchSport) {
-        return matchSport === sport.toLowerCase();
-      }
-      const homeCode = (m.homeTeamCode || m.home_team || '').trim().toUpperCase();
-      const isNbaMatch = NBA_TEAM_CODES.includes(homeCode);
-      return sport === 'nba' ? isNbaMatch : !isNbaMatch;
+      return matchSport ? matchSport === sport.toLowerCase() : true;
     });
   }, [matches, sport]);
 
@@ -57,8 +76,8 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
     if (selectedGameFilter === 'ALL') return null;
     return (
       activeMatches.find((m) => {
-        const away = (m.awayTeamCode || m.away_team || '').trim().toUpperCase();
-        const home = (m.homeTeamCode || m.home_team || '').trim().toUpperCase();
+        const away = normalizeCode(m.awayTeamCode || m.away_team || '');
+        const home = normalizeCode(m.homeTeamCode || m.home_team || '');
         return m.id === selectedGameFilter || `${away}@${home}` === selectedGameFilter;
       }) || null
     );
@@ -68,24 +87,12 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
     const q = searchQuery.trim().toLowerCase();
     let list = Array.isArray(allPlayers) ? [...allPlayers] : [];
 
-    // App.tsx already passes a sport-scoped roster. 
-    // We only apply this filter as a defensive guard if mixed data exists.
-    list = list.filter((p) => {
-      const rawSport = (p.sport || p.sportId || '').toLowerCase();
-      if (rawSport) {
-        return rawSport === sport.toLowerCase();
-      }
-      const team = (p.teamCode || '').toUpperCase();
-      const isNba = NBA_TEAM_CODES.includes(team);
-      return sport === 'nba' ? isNba : !isNba;
-    });
-
     if (activeMatchObj) {
-      const away = (activeMatchObj.awayTeamCode || activeMatchObj.away_team || '').trim().toUpperCase();
-      const home = (activeMatchObj.homeTeamCode || activeMatchObj.home_team || '').trim().toUpperCase();
+      const away = normalizeCode(activeMatchObj.awayTeamCode || activeMatchObj.away_team || '');
+      const home = normalizeCode(activeMatchObj.homeTeamCode || activeMatchObj.home_team || '');
       list = list.filter((p) => {
-        const code = (p.teamCode || '').trim().toUpperCase();
-        return code === away || code === home;
+        const playerTeam = normalizeCode(p.teamCode || (p as any).team || '');
+        return playerTeam === away || playerTeam === home;
       });
     }
 
@@ -101,7 +108,7 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
     }
 
     return list.sort((a, b) => (b.score || 0) - (a.score || 0));
-  }, [allPlayers, activeMatchObj, searchQuery, sport]);
+  }, [allPlayers, activeMatchObj, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -110,8 +117,6 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="relative w-full max-w-3xl bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-3 sm:p-5 rounded-xs my-auto max-h-[92vh] flex flex-col box-border gap-2.5 sm:gap-3">
-        
-        {/* Header */}
         <div className="flex items-center justify-between pb-2 sm:pb-3 border-b-2 border-[#d4a86a] shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-base sm:text-xl select-none">{sport === 'nba' ? '🏀' : '⭐'}</span>
@@ -130,7 +135,6 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           </button>
         </div>
 
-        {/* Game Filter Bar */}
         <div className="shrink-0 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar touch-pan-x">
           <button
             type="button"
@@ -145,8 +149,8 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           </button>
 
           {activeMatches.map((match) => {
-            const away = (match.awayTeamCode || match.away_team || '').trim().toUpperCase();
-            const home = (match.homeTeamCode || match.home_team || '').trim().toUpperCase();
+            const away = normalizeCode(match.awayTeamCode || match.away_team || '');
+            const home = normalizeCode(match.homeTeamCode || match.home_team || '');
             const isSelected = selectedGameFilter === match.id || selectedGameFilter === `${away}@${home}`;
 
             return (
@@ -168,7 +172,6 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           })}
         </div>
 
-        {/* Search Input */}
         <div className="relative flex items-center shrink-0">
           <Search size={14} className="absolute left-2.5 text-[#784610] pointer-events-none" />
           <input
@@ -189,7 +192,6 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
           )}
         </div>
 
-        {/* Unified Player Grid */}
         <div className="flex-1 overflow-y-auto pr-1 min-h-0">
           {filteredPlayers.length === 0 ? (
             <div className="text-center py-10 font-retro text-xs text-[#784610]">
@@ -273,7 +275,6 @@ export const PlayerPickerModal: React.FC<PlayerPickerModalProps> = ({
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

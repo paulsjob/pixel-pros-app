@@ -7,8 +7,6 @@ import {
   subscribeToRoomRosters,
   fetchLiveCompetitors,
   fetchLiveMatches,
-  fetchLiveNFLCompetitors,
-  fetchLiveNFLMatches,
   upsertUserRoster,
   fetchRoomRosters,
   deleteUserRoster,
@@ -26,8 +24,6 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { PixelHelmetIcon } from './components/PixelBadges';
 import { SportSwitcher } from './components/SportSwitcher';
 import { Users, Trophy, HelpCircle, Share2 } from 'lucide-react';
-
-const NBA_TEAMS = ['BOS', 'DEN', 'DAL', 'SAS', 'MIL', 'OKC', 'GSW', 'LAL', 'PHX', 'NYK', 'MIA_NBA', 'PHI_NBA'];
 
 export default function App() {
   const [currentSport, setCurrentSport] = useState<SportId>(() => {
@@ -421,59 +417,19 @@ export default function App() {
     showToast(nextLocked ? `PICKS LOCKED for ${userName}!` : `PICKS UNLOCKED for ${userName}!`);
   };
 
-  // Synchronizer: Fetches both primary and fallback tables if one returns empty
   useEffect(() => {
     let active = true;
     async function sync() {
       try {
-        let compData: Competitor[] = [];
-        let matchData: Match[] = [];
-
-        if (currentSport === 'nfl') {
-          // Attempt fetchLiveCompetitors first, fallback to fetchLiveNFLCompetitors
-          const primaryComp = await fetchLiveCompetitors('nfl');
-          if (Array.isArray(primaryComp) && primaryComp.length > 0) {
-            compData = primaryComp;
-          } else if (typeof fetchLiveNFLCompetitors === 'function') {
-            const fallbackComp = await fetchLiveNFLCompetitors();
-            compData = fallbackComp || [];
-          }
-
-          const primaryMatches = await fetchLiveMatches('nfl');
-          if (Array.isArray(primaryMatches) && primaryMatches.length > 0) {
-            matchData = primaryMatches;
-          } else if (typeof fetchLiveNFLMatches === 'function') {
-            const fallbackMatches = await fetchLiveNFLMatches();
-            matchData = fallbackMatches || [];
-          }
-        } else {
-          const [nbaComp, nbaMatches] = await Promise.all([
-            fetchLiveCompetitors('nba'),
-            fetchLiveMatches('nba'),
-          ]);
-          compData = nbaComp || [];
-          matchData = nbaMatches || [];
-        }
-
-        const rost = await fetchRoomRosters(roomCode, currentSport);
+        const [compData, matchData, rost] = await Promise.all([
+          fetchLiveCompetitors(currentSport),
+          fetchLiveMatches(currentSport),
+          fetchRoomRosters(roomCode, currentSport),
+        ]);
 
         if (!active) return;
 
-        // Clean competitor list: Never drop NFL players if sport is unspecified
-        const cleanComp = (compData || []).filter((p) => {
-          if (!p) return false;
-          const rawSport = (p.sport || p.sportId || '').toLowerCase();
-          const team = (p.teamCode || '').toUpperCase();
-          const isExplicitNba = rawSport === 'nba' || NBA_TEAMS.includes(team);
-
-          if (currentSport === 'nba') {
-            return isExplicitNba;
-          }
-          // In NFL mode: keep everything that is NOT NBA
-          return !isExplicitNba;
-        });
-
-        setRoster(cleanComp);
+        setRoster(compData || []);
         setMatches(matchData || []);
         setRoomRosters(rost || []);
 
@@ -503,9 +459,9 @@ export default function App() {
         if (activeUserClean) {
           const dbRoster = validRosters.find((r) => r.user_name.toUpperCase() === activeUserClean);
           if (dbRoster) {
-            s1 = cleanComp.find((a) => a.id === dbRoster.star_1_id) || null;
-            s2 = cleanComp.find((a) => a.id === dbRoster.star_2_id) || null;
-            s3 = cleanComp.find((a) => a.id === dbRoster.star_3_id) || null;
+            s1 = (compData || []).find((a) => a.id === dbRoster.star_1_id) || null;
+            s2 = (compData || []).find((a) => a.id === dbRoster.star_2_id) || null;
+            s3 = (compData || []).find((a) => a.id === dbRoster.star_3_id) || null;
             initialLock = Boolean(dbRoster.is_locked || dbRoster.device_id === 'LOCKED');
           }
         }
@@ -707,7 +663,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* Squad Switcher Bar */}
         <FamilySquadSwitcher
           activeUserName={userName}
           roomCode={roomCode}
@@ -732,7 +687,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Main Stage */}
         <main
           className={`flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 sm:px-6 sm:py-4 overscroll-contain relative box-border ${
             currentSport === 'nba' ? 'basketball-court' : 'football-field'
@@ -821,7 +775,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Player Picker Modal */}
         {activeSlot !== null && (
           <PlayerPickerModal
             isOpen={activeSlot !== null}
@@ -841,7 +794,6 @@ export default function App() {
           />
         )}
 
-        {/* Player Inspector Modal */}
         {detailedPlayer && (
           <PlayerCardModal
             player={detailedPlayer}
@@ -874,7 +826,6 @@ export default function App() {
           />
         )}
 
-        {/* Switch Room Modal */}
         {isRoomModalOpen && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
             <div className="pixel-box-cream p-4 w-full max-w-sm border-4 border-[#1a2238]">
