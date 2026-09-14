@@ -98,8 +98,8 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
             </span>
           </div>
 
-        {/* Squad Pills List & [+ ADD] Action */}
-        <div className="flex items-center gap-1.5 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+        {/* Squad Pills List & [+ ADD] Action - Smooth Horizontal Scroll */}
+        <div className="flex-1 min-w-0 flex items-center gap-1.5 flex-nowrap overflow-x-auto no-scrollbar touch-pan-x">
           {squadList.map((squad) => {
             const isActive = squad.userName === normalizedActive;
             const isLeader = maxScore > 0 && (squad.totalScore ?? 0) === maxScore;
@@ -110,7 +110,7 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
                 key={squad.userName}
                 type="button"
                 onClick={() => onSelectSquad(squad.userName)}
-                className={`touch-manipulation flex items-center gap-1.5 px-2.5 py-1 font-pixel text-[10px] sm:text-xs rounded-xs border-2 transition-all cursor-pointer select-none whitespace-nowrap active:translate-y-0.5 ${
+                className={`touch-manipulation shrink-0 flex items-center gap-1.5 px-2 sm:px-2.5 py-1 font-pixel text-[10px] sm:text-xs rounded-xs border-2 transition-all cursor-pointer select-none whitespace-nowrap active:translate-y-0.5 ${
                   isActive
                     ? 'bg-[#155e9e] text-[#fae5b8] border-[#38bdf8] shadow-[0_2px_0_0_#051a30] font-bold'
                     : 'bg-[#1a2238] text-[#94a3b8] hover:text-[#fae5b8] border-[#273552] hover:border-[#38bdf8]/60 hover:bg-[#232e4b]'
@@ -130,7 +130,7 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
                   <span className="text-[#fde047]">★</span>
                 ) : null}
 
-                <span>{squad.userName}</span>
+                <span className="truncate max-w-[90px] sm:max-w-none">{squad.userName}</span>
 
                 {/* 🔒 Lock Icon if Picks are Locked */}
                 {squad.isLocked && (
@@ -141,7 +141,7 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
 
                 {/* Points Pill (e.g. 84p) */}
                 <span
-                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded-2xs ${
+                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded-2xs shrink-0 ${
                     isActive
                       ? 'bg-[#0a2d52] text-[#fde047]'
                       : isLeader
@@ -160,7 +160,7 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
             <button
               type="button"
               onClick={handleStartAdd}
-              className="touch-manipulation flex items-center gap-1 px-2 py-1 font-pixel text-[10px] sm:text-xs rounded-xs border-2 border-dashed border-[#16a34a] bg-[#14532d]/40 text-[#4ade80] hover:bg-[#16a34a] hover:text-white transition-all cursor-pointer select-none whitespace-nowrap active:translate-y-0.5 shadow-xs font-bold"
+              className="touch-manipulation shrink-0 flex items-center gap-1 px-2 py-1 font-pixel text-[10px] sm:text-xs rounded-xs border-2 border-dashed border-[#16a34a] bg-[#14532d]/40 text-[#4ade80] hover:bg-[#16a34a] hover:text-white transition-all cursor-pointer select-none whitespace-nowrap active:translate-y-0.5 shadow-xs font-bold"
               title="Add another family squad to this room"
             >
               <Plus size={12} />
@@ -183,7 +183,7 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
             onSubmit={handleCommitNewSquad}
             className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-[#0c142b] p-2 sm:p-2.5 border-2 border-[#2563eb] rounded-xs shadow-md"
           >
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto min-w-0">
               <label htmlFor="new-squad-name-input" className="font-pixel text-[10px] sm:text-xs text-[#38bdf8] whitespace-nowrap">
                 NEW SQUAD NAME:
               </label>
@@ -202,14 +202,14 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
               />
               
               {/* Quick suggestions pills */}
-              <div className="flex items-center gap-1 flex-wrap">
-                <span className="font-pixel text-[9px] text-[#64748b]">QUICK:</span>
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar whitespace-nowrap py-0.5 w-full sm:w-auto">
+                <span className="font-pixel text-[9px] text-[#64748b] shrink-0">QUICK:</span>
                 {quickFamilySuggestions.map((sug) => (
                   <button
                     key={sug}
                     type="button"
                     onClick={() => setNewSquadName(sug)}
-                    className="touch-manipulation font-pixel text-[9px] px-1.5 py-0.5 bg-[#1a2238] hover:bg-[#232e4b] text-[#94a3b8] hover:text-[#fae5b8] border border-[#273552] rounded-2xs cursor-pointer"
+                    className="touch-manipulation font-pixel text-[9px] px-1.5 py-0.5 bg-[#1a2238] hover:bg-[#232e4b] text-[#94a3b8] hover:text-[#fae5b8] border border-[#273552] rounded-2xs cursor-pointer shrink-0 whitespace-nowrap"
                   >
                     {sug}
                   </button>
@@ -217,18 +217,18 @@ export const FamilySquadSwitcher: React.FC<FamilySquadSwitcherProps> = ({
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+            {/* Action Buttons: Cancel and Create side-by-side on mobile */}
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-1.5 w-full sm:w-auto justify-end mt-1 sm:mt-0">
               <button
                 type="button"
                 onClick={handleCancelAdd}
-                className="touch-manipulation px-2.5 py-1 bg-[#334155] hover:bg-[#475569] text-white border border-[#1e293b] font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5"
+                className="touch-manipulation px-2.5 py-1.5 sm:py-1 bg-[#334155] hover:bg-[#475569] text-white border border-[#1e293b] font-pixel text-[10px] rounded-2xs cursor-pointer active:translate-y-0.5 text-center"
               >
                 CANCEL
               </button>
               <button
                 type="submit"
-                className="touch-manipulation px-3 py-1 bg-[#16a34a] hover:bg-[#22c55e] text-white border border-[#14532d] font-pixel text-[10px] rounded-2xs cursor-pointer shadow-sm active:translate-y-0.5 font-bold flex items-center gap-1"
+                className="touch-manipulation px-3 py-1.5 sm:py-1 bg-[#16a34a] hover:bg-[#22c55e] text-white border border-[#14532d] font-pixel text-[10px] rounded-2xs cursor-pointer shadow-sm active:translate-y-0.5 font-bold flex items-center justify-center gap-1 text-center whitespace-nowrap"
               >
                 <Check size={11} />
                 <span>CREATE SQUAD</span>

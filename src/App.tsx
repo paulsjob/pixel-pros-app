@@ -676,31 +676,33 @@ export default function App() {
             </button>
 
             {/* Center: [ MY SQUAD ]  [ COUCH BOARD ] */}
-            <nav className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <nav className="flex items-center gap-1 sm:gap-2 shrink-0">
               <button
                 onClick={() => setCurrentTab('squad')}
-                className={`touch-manipulation px-2.5 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1.5 font-pixel text-[11px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
+                className={`touch-manipulation px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1 sm:gap-1.5 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
                   currentTab === 'squad'
                     ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30] font-bold'
                     : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
                 }`}
                 title="My Squad"
               >
-                <Users size={14} className={currentTab === 'squad' ? 'text-[#38bdf8]' : ''} />
-                <span className="whitespace-nowrap">MY SQUAD</span>
+                <Users size={13} className={currentTab === 'squad' ? 'text-[#38bdf8]' : ''} />
+                <span className="whitespace-nowrap md:hidden">SQUAD</span>
+                <span className="whitespace-nowrap hidden md:inline">MY SQUAD</span>
               </button>
 
               <button
                 onClick={() => setCurrentTab('couch')}
-                className={`touch-manipulation px-2.5 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1.5 font-pixel text-[11px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
+                className={`touch-manipulation px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-center gap-1 sm:gap-1.5 font-pixel text-[10px] sm:text-xs border-2 cursor-pointer transition-all active:translate-y-0.5 ${
                   currentTab === 'couch'
                     ? 'bg-[#12579b] text-[#fae5b8] border-[#0a2d52] shadow-[0_2px_0_0_#051a30] font-bold'
                     : 'bg-[#1a2238] text-[#fae5b8]/75 border-[#273552] hover:bg-[#232e4b] hover:text-[#fae5b8]'
                 }`}
                 title="Couch Board"
               >
-                <Trophy size={14} className={currentTab === 'couch' ? 'text-[#38bdf8]' : ''} />
-                <span className="whitespace-nowrap">COUCH BOARD</span>
+                <Trophy size={13} className={currentTab === 'couch' ? 'text-[#38bdf8]' : ''} />
+                <span className="whitespace-nowrap md:hidden">BOARD</span>
+                <span className="whitespace-nowrap hidden md:inline">COUCH BOARD</span>
               </button>
             </nav>
 
@@ -712,7 +714,7 @@ export default function App() {
                   setTempRoomCode(roomCode);
                   setIsRoomModalOpen(true);
                 }}
-                className="touch-manipulation flex items-center gap-1 px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] border border-[#273552] hover:border-[#f59e0b] rounded-xs font-pixel text-[10px] sm:text-xs text-[#fae5b8] whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 shadow-xs"
+                className="touch-manipulation flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-[#1a2238] hover:bg-[#232e4b] border border-[#273552] hover:border-[#f59e0b] rounded-xs font-pixel text-[9px] sm:text-xs text-[#fae5b8] whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 shadow-xs"
                 title="Tap to switch room"
               >
                 <span className="text-[#38bdf8]">ROOM:</span>
@@ -742,10 +744,10 @@ export default function App() {
           onCreateSquad={handleCreateSquad}
         />
 
-        {/* Retro Toast Notification - Positioned cleanly at top center */}
+        {/* Retro Toast Notification - Positioned safely at bottom on mobile (< 768px), top center on desktop */}
         {toastMessage && (
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-200 pointer-events-none">
-            <div className="bg-[#064e3b] text-[#fae5b8] px-4 py-2 border-2 border-[#10b981] rounded-xs font-pixel text-xs shadow-[0_6px_16px_rgba(0,0,0,0.7)] flex items-center gap-2 whitespace-nowrap">
+          <div className="fixed bottom-4 left-4 right-4 md:bottom-auto md:top-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 md:slide-in-from-top-4 fade-in duration-200 pointer-events-none">
+            <div className="bg-[#064e3b] text-[#fae5b8] px-3.5 sm:px-4 py-2 border-2 border-[#10b981] rounded-xs font-pixel text-xs shadow-[0_6px_16px_rgba(0,0,0,0.7)] flex items-center justify-center md:justify-start gap-2 whitespace-nowrap text-center">
               <span className="text-sm select-none">⚡</span>
               <span className="font-bold tracking-wide">{toastMessage}</span>
             </div>
@@ -887,6 +889,8 @@ export default function App() {
             onSelectPlayer={(player, targetSlot) => {
               handleAssignSlot(player, targetSlot);
               setActiveSlot(null);
+              setDetailedPlayer(null);
+              setCurrentTab('squad');
             }}
           />
         )}
@@ -910,16 +914,19 @@ export default function App() {
               onClose={() => setDetailedPlayer(null)}
               isSelectedForTeam={Boolean(occupiedSlot) || selectedPlayerIdsArray.includes(livePlayer.id)}
               onSelectForTeam={(player) => {
-                // Find first empty slot or star1
-                const emptySlot: ActiveSlot = !squadSlots.star1
+                // Target slot is activeSlot if picker was open, or first available slot
+                const targetSlot: ActiveSlot = activeSlot || (!squadSlots.star1
                   ? 'star1'
                   : !squadSlots.star2
                   ? 'star2'
                   : !squadSlots.star3
                   ? 'star3'
-                  : 'star1';
-                handleAssignSlot(player, emptySlot);
+                  : 'star1');
+                handleAssignSlot(player, targetSlot);
+                // IMMEDIATELY CLOSE BOTH MODALS & FOCUS ON YOUR 3 NFL STARS
                 setDetailedPlayer(null);
+                setActiveSlot(null);
+                setCurrentTab('squad');
               }}
               onSwapThisStar={() => {
                 const slotToSwap: ActiveSlot = occupiedSlot || 'star1';
@@ -929,6 +936,7 @@ export default function App() {
               onDropPlayer={() => {
                 if (occupiedSlot) {
                   handleClearSlot(occupiedSlot);
+                  setDetailedPlayer(null);
                 }
               }}
             />

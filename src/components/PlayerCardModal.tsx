@@ -54,29 +54,29 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
       {/* Outer Card Container */}
-      <div className="relative w-full max-w-md bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-4 sm:p-5 rounded-xs my-auto">
+      <div className="relative w-full max-w-md bg-[#fae5b8] border-4 border-[#1a2238] shadow-[0_8px_0_0_#0a0f1d] p-3.5 sm:p-5 rounded-xs my-auto max-h-[90vh] flex flex-col justify-between overflow-y-auto box-border">
         
         {/* Red Close Button */}
         <button
           onClick={onClose}
-          className="touch-manipulation absolute -top-3 -right-3 w-9 h-9 bg-[#b91c1c] text-[#fae5b8] border-2 border-[#1a2238] flex items-center justify-center cursor-pointer shadow-[0_3px_0_0_#450a0a] active:translate-y-1 active:shadow-none transition-all font-pixel text-xs"
+          className="touch-manipulation absolute -top-3 -right-3 w-8 h-8 sm:w-9 sm:h-9 bg-[#b91c1c] text-[#fae5b8] border-2 border-[#1a2238] flex items-center justify-center cursor-pointer shadow-[0_3px_0_0_#450a0a] active:translate-y-1 active:shadow-none transition-all font-pixel text-xs z-10"
           title="Cancel / Close Card"
         >
-          <X size={18} strokeWidth={3} />
+          <X size={16} strokeWidth={3} />
         </button>
 
         {/* Title: Authentic Player Name & Team / Number */}
-        <div className="text-center mb-3 pb-2.5 border-b-2 border-[#e2ba7d]">
-          <h2 className="font-pixel text-xl sm:text-2xl text-[#5c3509] tracking-wider uppercase leading-tight">
+        <div className="text-center mb-2 sm:mb-3 pb-2 sm:pb-2.5 border-b-2 border-[#e2ba7d] shrink-0">
+          <h2 className="font-pixel text-lg sm:text-2xl text-[#5c3509] tracking-wider uppercase leading-tight">
             {selectedPlayer.displayName}
           </h2>
-          <div className="text-xs font-retro text-[#784610] mt-1 flex items-center justify-center gap-2">
-            <span className="px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] text-[#12579b] font-pixel text-[10px] font-bold rounded-2xs">
+          <div className="text-[11px] sm:text-xs font-retro text-[#784610] mt-1 flex items-center justify-center gap-1.5 sm:gap-2">
+            <span className="px-1.5 sm:px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] text-[#12579b] font-pixel text-[9px] sm:text-[10px] font-bold rounded-2xs">
               {selectedPlayer.teamCode}
             </span>
-            <span className="font-bold">{selectedPlayer.teamName}</span>
+            <span className="font-bold truncate max-w-[120px] sm:max-w-none">{selectedPlayer.teamName}</span>
             <span>•</span>
-            <span className="font-pixel text-[11px] text-[#451a03]">#{selectedPlayer.uniformNumber}</span>
+            <span className="font-pixel text-[10px] sm:text-[11px] text-[#451a03]">#{selectedPlayer.uniformNumber}</span>
             <span>•</span>
             <span className="px-1.5 py-0.5 bg-[#ebd2a4] border border-[#c99a57] font-pixel text-[9px] text-[#5c3509] rounded-2xs font-bold">
               {selectedPlayer.position || 'STAR'}
@@ -85,35 +85,46 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
         </div>
 
         {/* Clean Athlete Presentation: Sprite + Live Score */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 shrink-0">
           
-          {/* Left: Player Sprite & Identity */}
-          <div className="bg-[#ebd2a4] border-2 border-[#c99a57] rounded-xs flex flex-col items-center justify-center p-3 min-h-[150px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
-            <PixelPlayerSprite
-              avatar={selectedPlayer.avatar}
-              number={selectedPlayer.uniformNumber}
-              size="lg"
-              withShadow={true}
-              animate={true}
-            />
-            <div className="mt-2 px-2.5 py-0.5 bg-[#fae5b8] border border-[#c99a57] text-[#5c3509] font-pixel text-[9px] rounded-xs uppercase tracking-wider font-bold">
-              #{selectedPlayer.uniformNumber} · {selectedPlayer.teamCode} · {selectedPlayer.position || 'OFFENSE'}
+          {/* Left: Player Sprite & Identity (Scaled down to compact ~80-90px on mobile) */}
+          <div className="bg-[#ebd2a4] border-2 border-[#c99a57] rounded-xs flex flex-col items-center justify-center p-2 sm:p-3 min-h-[110px] sm:min-h-[150px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
+            <div className="sm:hidden scale-80 origin-center -my-2">
+              <PixelPlayerSprite
+                avatar={selectedPlayer.avatar}
+                number={selectedPlayer.uniformNumber}
+                size="md"
+                withShadow={true}
+                animate={true}
+              />
+            </div>
+            <div className="hidden sm:block">
+              <PixelPlayerSprite
+                avatar={selectedPlayer.avatar}
+                number={selectedPlayer.uniformNumber}
+                size="lg"
+                withShadow={true}
+                animate={true}
+              />
+            </div>
+            <div className="mt-1 sm:mt-2 px-1.5 sm:px-2.5 py-0.5 bg-[#fae5b8] border border-[#c99a57] text-[#5c3509] font-pixel text-[8px] sm:text-[9px] rounded-xs uppercase tracking-wider font-bold truncate max-w-full">
+              #{selectedPlayer.uniformNumber} · {selectedPlayer.teamCode}
             </div>
           </div>
 
           {/* Right: Big Score Readout */}
-          <div className="bg-[#ebd2a4] border-2 border-[#c99a57] p-3 rounded-xs text-center flex flex-col items-center justify-center min-h-[150px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
-            <div className="flex items-center gap-1.5 text-[#5c3509] font-pixel text-[11px] uppercase tracking-wider mb-0.5">
-              <Activity size={13} className="text-[#16a34a]" />
-              <span>CURRENT SCORE</span>
+          <div className="bg-[#ebd2a4] border-2 border-[#c99a57] p-2 sm:p-3 rounded-xs text-center flex flex-col items-center justify-center min-h-[110px] sm:min-h-[150px] shadow-[inset_0_2px_4px_rgba(0,0,0,0.06)]">
+            <div className="flex items-center gap-1 text-[#5c3509] font-pixel text-[9px] sm:text-[11px] uppercase tracking-wider mb-0.5">
+              <Activity size={12} className="text-[#16a34a]" />
+              <span>SCORE</span>
             </div>
             
-            <div className="font-pixel text-3xl sm:text-4xl text-[#12579b] tracking-wider font-bold my-0.5 drop-shadow-[0_1px_0_#fae5b8]">
+            <div className="font-pixel text-2xl sm:text-4xl text-[#12579b] tracking-wider font-bold my-0.5 drop-shadow-[0_1px_0_#fae5b8]">
               {displayScore} PTS
             </div>
 
-            <div className="mt-1.5 text-[10px] font-retro text-[#784610] px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs whitespace-nowrap">
-              WHOLE NUMBER SCORING
+            <div className="mt-1 text-[9px] sm:text-[10px] font-retro text-[#784610] px-1.5 sm:px-2 py-0.5 bg-[#fae9c8] border border-[#d4a86a] rounded-xs whitespace-nowrap">
+              WHOLE NUMBER
             </div>
           </div>
 
